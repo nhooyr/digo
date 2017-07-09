@@ -61,10 +61,10 @@ type Message struct {
 type Reaction struct {
 	Count int
 	Me    bool
-	Emoji *Emoji
+	Emoji *ReactionEmoji
 }
 
-type Emoji struct {
+type ReactionEmoji struct {
 	ID   *snowflake.ID // nullable
 	Name string
 }
@@ -146,5 +146,5 @@ type Attachment struct {
 	Width    int
 }
 
-// TODO create mention method on User, Channel, Role and Custom Emoji structs
+// TODO create mention method on User, Channel, Role and Custom ReactionEmoji structs
 // https://discordapp.com/developers/docs/resources/channel#message-formatting
