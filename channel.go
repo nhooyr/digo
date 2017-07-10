@@ -176,7 +176,7 @@ func (c *Client) GetChannel(cID string) (ch *Channel, err error) {
 	return ch, json.Unmarshal(body, &ch)
 }
 
-type ModifyChannel struct {
+type ModifyChannelParams struct {
 	Name      string `json:"name,omitempty"`
 	Position  int    `json:"position,omitempty"`
 	Topic     string `json:"topic,omitempty"`
@@ -184,9 +184,9 @@ type ModifyChannel struct {
 	UserLimit int    `json:"user_limit,omitempty"`
 }
 
-func (c *Client) ModifyChannel(cID string, chm *ModifyChannel) error {
+func (c *Client) ModifyChannel(cID string, chmp *ModifyChannelParams) error {
 	endpoint := endpointChannel(cID)
-	req, err := c.newRequestJSON("PATCH", endpoint, chm)
+	req, err := c.newRequestJSON("PATCH", endpoint, chmp)
 	if err != nil {
 		return err
 	}
@@ -211,35 +211,39 @@ func endpointChannelMessages(cID string) string {
 	return path.Join(endpointChannel(cID), "messages")
 }
 
-type GetChannelMessages struct {
+type GetChannelMessagesParams struct {
 	AroundID string
 	BeforeID string
 	AfterID  string
 	Limit    int
 }
 
-func (c *Client) GetChannelMessages(cID string, gcms *GetChannelMessages) (msgs []*Message, err error) {
+func (gcmsp *GetChannelMessagesParams) RawQuery() string {
+	v := make(url.Values)
+	if gcmsp.AroundID != "" {
+		v.Set("around", gcmsp.AroundID)
+	}
+	if gcmsp.BeforeID != "" {
+		v.Set("before", gcmsp.BeforeID)
+	}
+	if gcmsp.AfterID != "" {
+		v.Set("after", gcmsp.AfterID)
+	}
+	if gcmsp.Limit > 0 {
+		v.Set("limit", strconv.Itoa(gcmsp.Limit))
+	}
+	return v.Encode()
+}
+
+func (c *Client) GetChannelMessages(cID string, gcmsp *GetChannelMessagesParams) (msgs []*Message, err error) {
 	endpoint := endpointChannelMessages(cID)
 	req, err := c.newRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	v := url.Values{}
-	if gcms.AroundID != "" {
-		v.Set("around", gcms.AroundID)
-	}
-	if gcms.BeforeID != "" {
-		v.Set("before", gcms.BeforeID)
-	}
-	if gcms.AfterID != "" {
-		v.Set("after", gcms.AfterID)
-	}
-	if gcms.Limit > 0 {
-		v.Set("limit", strconv.Itoa(gcms.Limit))
-	}
-	if len(v) > 0 {
-		req.URL.RawQuery = v.Encode()
+	if gcmsp != nil {
+		req.URL.RawQuery = gcmsp.RawQuery()
 	}
 
 	body, err := c.do(req, endpoint, 0)
@@ -267,7 +271,7 @@ func (c *Client) GetChannelMessage(cID, mID string) (m *Message, err error) {
 	return m, json.Unmarshal(body, &m)
 }
 
-type CreateMessage struct {
+type CreateMessageParams struct {
 	Content string `json:"content,omitempty"`
 	Nonce   string `json:"nonce,omitempty"`
 	TTS     bool   `json:"tts,omitempty"`
@@ -275,11 +279,11 @@ type CreateMessage struct {
 	Embed   *Embed `json:"embed,omitempty"`
 }
 
-func (c *Client) CreateMessage(cID string, cm *CreateMessage) (m *Message, err error) {
+func (c *Client) CreateMessage(cID string, cmp *CreateMessageParams) (m *Message, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
-	payloadJSON, err := json.Marshal(cm)
+	payloadJSON, err := json.Marshal(cmp)
 	if err != nil {
 		return nil, err
 	}
@@ -292,13 +296,13 @@ func (c *Client) CreateMessage(cID string, cm *CreateMessage) (m *Message, err e
 		return nil, err
 	}
 
-	if cm.File != nil {
-		w, err := reqBodyWriter.CreateFormFile("file", cm.File.Name)
+	if cmp.File != nil {
+		w, err := reqBodyWriter.CreateFormFile("file", cmp.File.Name)
 		if err != nil {
 			return nil, err
 		}
 
-		_, err = io.Copy(w, cm.File.Content)
+		_, err = io.Copy(w, cmp.File.Content)
 		if err != nil {
 			return nil, err
 		}

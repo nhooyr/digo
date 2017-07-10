@@ -22,7 +22,7 @@ func TestClient(t *testing.T) {
 	}
 	defer f.Close()
 
-	cm := &discgo.CreateMessage{
+	cm := &discgo.CreateMessageParams{
 		Content: "boar",
 		File: &discgo.File{
 			Name:    "screenshot.png",
