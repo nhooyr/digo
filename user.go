@@ -1,7 +1,5 @@
 package discgo
 
-import "github.com/bwmarrin/snowflake"
-
 type User struct {
 	ID            string
 	Username      string

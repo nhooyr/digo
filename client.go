@@ -32,7 +32,7 @@ func NewClient() *Client {
 const endpointAPI = "https://discordapp.com/api/"
 
 func (c *Client) newRequest(method, endpoint string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest("GET", endpointAPI+endpoint, body)
+	req, err := http.NewRequest(method, endpointAPI+endpoint, body)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +54,7 @@ func (c *Client) newRequestJSON(method, endpoint string, v interface{}) (*http.R
 	if err != nil {
 		return nil, err
 	}
+	// TODO is this necessary?
 	req.Header.Set("Content-Type", "application/json")
 	return req, nil
 }
@@ -85,7 +86,7 @@ func (c *Client) do(req *http.Request, rateLimitPath string, n int) ([]byte, err
 	case http.StatusTooManyRequests:
 		return c.do(req, rateLimitPath, n)
 	default:
-		return nil, errors.Errorf("unexpected status code %q", resp.StatusCode)
+		return nil, errors.Errorf("unexpected status code %v", resp.StatusCode)
 	}
 	return body, nil
 }

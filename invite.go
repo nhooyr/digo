@@ -2,8 +2,6 @@ package discgo
 
 import (
 	"time"
-
-	"github.com/bwmarrin/snowflake"
 )
 
 type Invite struct {

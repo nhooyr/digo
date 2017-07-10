@@ -1,7 +1,5 @@
 package discgo
 
-import "github.com/bwmarrin/snowflake"
-
 type VoiceState struct {
 	GuildID   *string
 	ChannelID string

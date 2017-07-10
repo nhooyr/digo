@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"strconv"
 
+	"bytes"
 	"io"
+	"mime/multipart"
 )
 
 // Channel represents a channel in Discord.
@@ -83,73 +85,73 @@ type Overwrite struct {
 }
 
 type Embed struct {
-	Title       string
-	Type        string
-	Description string
-	URL         string
-	Timestamp   time.Time
-	Color       int
-	Footer      *EmbedFooter
-	Image       *EmbedImage
-	Thumbnail   *EmbedThumbnail
-	Video       *EmbedVideo
-	Provider    *EmbedProvider
-	Author      *EmbedAuthor
-	Fields      []*EmbedField
+	Title       string          `json:"title,omitempty"`
+	Type        string          `json:"type,omitempty"`
+	Description string          `json:"description,omitempty"`
+	URL         string          `json:"url,omitempty"`
+	Timestamp   *time.Time      `json:"timestamp,omitempty"`
+	Color       int             `json:"color,omitempty"`
+	Footer      *EmbedFooter    `json:"footer,omitempty"`
+	Image       *EmbedImage     `json:"image,omitempty"`
+	Thumbnail   *EmbedThumbnail `json:"thumbnail,omitempty"`
+	Video       *EmbedVideo     `json:"video,omitempty"`
+	Provider    *EmbedProvider  `json:"provider,omitempty"`
+	Author      *EmbedAuthor    `json:"author,omitempty"`
+	Fields      []*EmbedField   `json:"fields,omitempty"`
 }
 
 type EmbedThumbnail struct {
-	URL      string
-	ProxyURL string
-	Height   int
-	Width    int
+	URL      string `json:"url,omitempty"`
+	ProxyURL string `json:"proxy_url,omitempty"`
+	Height   int    `json:"height,omitempty"`
+	Width    int    `json:"width,omitempty"`
 }
 
 type EmbedVideo struct {
-	URL    string
-	Height int
-	Width  int
+	URL    string `json:"url,omitempty"`
+	Height int    `json:"height,omitempty"`
+	Width  int    `json:"width,omitempty"`
 }
 
 type EmbedImage struct {
-	URL      string
-	ProxyURL string
-	Height   int
-	Width    int
+	URL      string `json:"url,omitempty"`
+	ProxyURL string `json:"proxy_url,omitempty"`
+	Height   int    `json:"height,omitempty"`
+	Width    int    `json:"width,omitempty"`
 }
 
 type EmbedProvider struct {
-	Name string
-	URL  string
+	Name string `json:"name,omitempty"`
+	URL  string `json:"url,omitempty"`
 }
 
 type EmbedAuthor struct {
-	Name         string
-	URL          string
-	IconURL      string
-	ProxyIconURL string
+	Name         string `json:"name,omitempty"`
+	URL          string `json:"url,omitempty"`
+	IconURL      string `json:"icon_url,omitempty"`
+	ProxyIconURL string `json:"proxy_icon_url,omitempty"`
 }
 
 type EmbedFooter struct {
-	Text         string
-	IconURL      string
-	ProxyIconURL string
+	Text         string `json:"text,omitempty"`
+	IconURL      string `json:"icon_url,omitempty"`
+	ProxyIconURL string `json:"proxy_icon_url,omitempty"`
 }
 
 type EmbedField struct {
-	Name   string
-	Value  string
-	Inline bool
+	Name   string `json:"name,omitempty"`
+	Value  string `json:"value,omitempty"`
+	Inline bool   `json:"inline,omitempty"`
 }
 
 type Attachment struct {
-	ID       string
-	Filename string
-	Size     int
-	URL      string
-	ProxyURL string
-	Height   int
-	Width    int
+	ID       string `json:"id,omitempty"`
+	Filename string `json:"filename,omitempty"`
+	Size     int    `json:"size,omitempty"`
+	URL      string `json:"url,omitempty"`
+	ProxyURL string `json:"proxy_url,omitempty"`
+	Height   int    `json:"height,omitempty"`
+	Width    int    `json:"width,omitempty"`
 }
 
 // TODO create mention method on User, Channel, Role and Custom ReactionEmoji structs
@@ -266,13 +268,57 @@ func (c *Client) GetChannelMessage(cID, mID string) (m *Message, err error) {
 }
 
 type CreateMessage struct {
-	Content string
-	Nonce   string
-	TTS     bool
-	File    *File
-	Embed   *Embed
+	Content string `json:"content,omitempty"`
+	Nonce   string `json:"nonce,omitempty"`
+	TTS     bool   `json:"tts,omitempty"`
+	File    *File  `json:"-"`
+	Embed   *Embed `json:"embed,omitempty"`
 }
 
-func (c *Client) CreateMessage(cID, cm *CreateMessage) (m *Message, err error) {
-	panic("TODO")
+func (c *Client) CreateMessage(cID string, cm *CreateMessage) (m *Message, err error) {
+	reqBody := &bytes.Buffer{}
+	reqBodyWriter := multipart.NewWriter(reqBody)
+
+	payloadJSON, err := json.Marshal(cm)
+	if err != nil {
+		return nil, err
+	}
+	w, err := reqBodyWriter.CreateFormField("payload_json")
+	if err != nil {
+		return nil, err
+	}
+	_, err = w.Write(payloadJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	if cm.File != nil {
+		w, err := reqBodyWriter.CreateFormFile("file", cm.File.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = io.Copy(w, cm.File.Content)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err = reqBodyWriter.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	endpoint := endpointChannelMessages(cID)
+	req, err := c.newRequest("POST", endpoint, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", reqBodyWriter.FormDataContentType())
+
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return m, json.Unmarshal(body, &m)
 }
