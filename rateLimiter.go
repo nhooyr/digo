@@ -74,29 +74,32 @@ func (prl *pathRateLimiter) unlock(h http.Header) (err error) {
 		return nil
 	}
 
-	remainingHeader := h.Get("X-RateLimit-Remaining")
 	resetHeader := h.Get("X-RateLimit-Reset")
 	globalHeader := h.Get("X-RateLimit-Global")
 
-	if resetHeader != "" {
-		log.Print("rate limited")
-		var epochResetAfter int64
-		epochResetAfter, err = strconv.ParseInt(resetHeader, 10, 64)
+	if globalHeader != "" {
+		retryAfterHeader := h.Get("Retry-After")
+		var parsedRetryAfter int64
+		parsedRetryAfter, err = strconv.ParseInt(retryAfterHeader, 10, 64)
 		if err != nil {
 			return err
 		}
-
-		resetAfter := time.Unix(epochResetAfter, 0)
-		if globalHeader == "true" {
-			prl.rl.setResetAfter(resetAfter)
-		} else {
-			prl.resetAfter = resetAfter
+		retryAfter := time.Now().Add(time.Duration(parsedRetryAfter) * time.Millisecond)
+		prl.rl.setResetAfter(retryAfter)
+	} else if resetHeader != "" {
+		var parsedResetAfter int64
+		parsedResetAfter, err = strconv.ParseInt(resetHeader, 10, 64)
+		if err != nil {
+			return err
 		}
+		prl.resetAfter = time.Unix(parsedResetAfter, 0)
 	}
 
+	remainingHeader := h.Get("X-RateLimit-Remaining")
 	if remainingHeader != "" {
 		prl.remaining, err = strconv.Atoi(remainingHeader)
 	}
+
 	return err
 }
 
