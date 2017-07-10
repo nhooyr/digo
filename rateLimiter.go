@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"log"
 )
 
 type rateLimiter struct {
@@ -44,6 +43,7 @@ func (rl *rateLimiter) setResetAfter(resetAfter time.Time) {
 	rl.Unlock()
 }
 
+// TODO allow concurrent requests to the same rate limited endpoint
 type pathRateLimiter struct {
 	mu         sync.Mutex
 	remaining  int
@@ -101,10 +101,4 @@ func (prl *pathRateLimiter) unlock(h http.Header) (err error) {
 	}
 
 	return err
-}
-
-type rateLimitResponse struct {
-	Message    string `json:"message"`
-	RetryAfter int    `json:"retry_after"`
-	Global     bool   `json:"global"`
 }

@@ -14,7 +14,7 @@ func TestClient(t *testing.T) {
 	c.HttpClient = &http.Client{
 		Timeout: time.Second * 15,
 	}
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10; i++ {
 		ch, err := c.GetChannel("331307058660114433")
 		if err != nil {
 			t.Fatal(err)
