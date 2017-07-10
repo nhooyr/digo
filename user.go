@@ -3,7 +3,7 @@ package discgo
 import "github.com/bwmarrin/snowflake"
 
 type User struct {
-	ID            snowflake.ID
+	ID            string
 	Username      string
 	Discriminator string
 	Avatar        string
@@ -14,7 +14,7 @@ type User struct {
 }
 
 type UserGuild struct {
-	ID          snowflake.ID
+	ID          string
 	Name        string
 	Icon        string
 	Owner       bool

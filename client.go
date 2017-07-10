@@ -29,14 +29,33 @@ func NewClient() *Client {
 	return &Client{rl: newRateLimiter()}
 }
 
-func (c *Client) doSetHeaders(req *http.Request, rateLimitPath string) ([]byte, error) {
+const endpointAPI = "https://discordapp.com/api/"
+
+func (c *Client) newRequest(method, endpoint string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest("GET", endpointAPI+endpoint, body)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("Authorization", c.Token)
 	if c.UserAgent == "" {
 		req.Header.Set("User-Agent", defaultUserAgent)
 	} else {
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
-	return c.do(req, rateLimitPath, 0)
+	return req, nil
+}
+
+func (c *Client) newRequestJSON(method, endpoint string, v interface{}) (*http.Request, error) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	req, err := c.newRequest(method, endpoint, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return req, nil
 }
 
 func (c *Client) do(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
@@ -76,45 +95,4 @@ func safeClose(closeFunc func() error, err *error) {
 	if cerr != nil && *err == nil {
 		*err = cerr
 	}
-}
-
-const baseURL = "https://discordapp.com/api"
-
-func newRequestJSON(method, path string, v interface{}) (*http.Request, error) {
-	body, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	req, err := newRequest(method, path, bytes.NewBuffer(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return req, nil
-}
-
-func newRequest(method, path string, body io.Reader) (*http.Request, error) {
-	return http.NewRequest("GET", baseURL+path, body)
-}
-
-// TODO I don't always need the baseURL prefix
-// TODO think about a way to access the api endpoints elegantly
-func apiPath(elements ...string) (path string) {
-	for _, e := range elements {
-		path += "/" + e
-	}
-	return path
-}
-
-func (c *Client) GetChannel(id string) (ch *Channel, err error) {
-	path := apiPath("channels", id)
-	req, err := newRequest("GET", path, nil)
-	if err != nil {
-		return nil, err
-	}
-	body, err := c.doSetHeaders(req, path)
-	if err != nil {
-		return nil, err
-	}
-	return ch, json.Unmarshal(body, &ch)
 }

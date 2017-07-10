@@ -3,9 +3,9 @@ package discgo
 import "github.com/bwmarrin/snowflake"
 
 type Webhook struct {
-	ID        snowflake.ID
-	GuildID   *snowflake.ID
-	ChannelID snowflake.ID
+	ID        string
+	GuildID   *string
+	ChannelID string
 	User      *User // TODO wtf why is question mark behind?
 	Name      *string
 	Avatar    *string

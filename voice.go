@@ -3,9 +3,9 @@ package discgo
 import "github.com/bwmarrin/snowflake"
 
 type VoiceState struct {
-	GuildID   *snowflake.ID
-	ChannelID snowflake.ID
-	UserID    snowflake.ID
+	GuildID   *string
+	ChannelID string
+	UserID    string
 	SessionID string
 	Deaf      bool
 	Mute      bool

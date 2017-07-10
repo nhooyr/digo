@@ -3,7 +3,7 @@ package discgo
 import "github.com/bwmarrin/snowflake"
 
 type Role struct {
-	ID          snowflake.ID
+	ID          string
 	Name        string
 	Color       int
 	Hoist       bool

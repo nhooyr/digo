@@ -23,14 +23,14 @@ type InviteMetadata struct {
 }
 
 type InviteGuild struct {
-	ID     snowflake.ID
+	ID     string
 	Name   string
 	Splash *string
 	Icon   *string
 }
 
 type InviteChannel struct {
-	ID   snowflake.ID
+	ID   string
 	Name string
 	Type string
 }

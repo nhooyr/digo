@@ -7,16 +7,16 @@ import (
 )
 
 type Guild struct {
-	ID                          snowflake.ID
+	ID                          string
 	Name                        string
 	Icon                        string
 	Splash                      string
-	OwnerID                     snowflake.ID
+	OwnerID                     string
 	Region                      string
-	AFKChannelID                snowflake.ID
+	AFKChannelID                string
 	AFKTimeout                  int
 	EmbedEnabled                bool
-	EmbedChannelID              snowflake.ID
+	EmbedChannelID              string
 	VerificationLevel           int
 	DefaultMessageNotifications int
 	Roles                       []*Role
@@ -34,31 +34,31 @@ type Guild struct {
 }
 
 type UnavailableGuild struct {
-	ID          snowflake.ID
+	ID          string
 	Unavailable bool
 }
 
 type GuildEmbed struct {
 	Enabled   bool
-	ChannelID snowflake.ID
+	ChannelID string
 }
 
 type GuildMember struct {
 	User     *User
 	Nick     *string
-	Roles    []snowflake.ID
+	Roles    []string
 	JoinedAt time.Time
 	Deaf     bool
 	Mute     bool
 }
 
 type Integration struct {
-	ID                snowflake.ID
+	ID                string
 	Name              string
 	Type              string
 	Enabled           bool
 	Syncing           bool
-	RoleID            snowflake.ID
+	RoleID            string
 	ExpireBehaviour   int
 	ExpireGracePeriod int
 	User              *User
@@ -67,14 +67,14 @@ type Integration struct {
 }
 
 type IntegrationAccount struct {
-	ID   snowflake.ID
+	ID   string
 	Name string
 }
 
 type GuildEmoji struct {
-	ID            snowflake.ID
+	ID            string
 	Name          string
-	Roles         []snowflake.ID
+	Roles         []string
 	RequireColons bool
 	Managed       bool
 }

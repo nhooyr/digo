@@ -1,11 +1,11 @@
 package discgo_test
 
 import (
+	"github.com/nhooyr/discgo"
 	"net/http"
 	"os"
 	"testing"
 	"time"
-	"github.com/nhooyr/discgo"
 )
 
 func TestClient(t *testing.T) {
@@ -14,11 +14,9 @@ func TestClient(t *testing.T) {
 	c.HttpClient = &http.Client{
 		Timeout: time.Second * 15,
 	}
-	for i := 0; i < 10; i++ {
-		ch, err := c.GetChannel("331307058660114433")
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Log(ch)
+	msg, err := c.GetChannelMessage("331307058660114433", "333262458955366400")
+	if err != nil {
+		t.Fatal(err)
 	}
+	t.Log(msg)
 }
