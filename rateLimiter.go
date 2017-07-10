@@ -74,8 +74,8 @@ func (prl *pathRateLimiter) unlock(h http.Header) (err error) {
 		return nil
 	}
 
-	resetHeader := h.Get("X-RateLimit-Reset")
 	globalHeader := h.Get("X-RateLimit-Global")
+	resetHeader := h.Get("X-RateLimit-Reset")
 
 	if globalHeader != "" {
 		retryAfterHeader := h.Get("Retry-After")

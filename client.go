@@ -6,7 +6,9 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+
 	"github.com/nhooyr/log"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -28,13 +30,17 @@ func NewClient() *Client {
 	return &Client{rl: newRateLimiter()}
 }
 
-func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
+func (c *Client) do_auth(req *http.Request, rateLimitPath string) ([]byte, error) {
 	req.Header.Set("Authorization", c.Token)
 	if c.UserAgent == "" {
 		req.Header.Set("User-Agent", defaultUserAgent)
 	} else {
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
+	return c.do(req, rateLimitPath)
+}
+
+func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
 	prl := c.rl.getPathRateLimiter(rateLimitPath)
 	prl.lock()
 	resp, err := c.HttpClient.Do(req)
@@ -52,15 +58,14 @@ func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO maybe somehow close resp.Body here? Cannot close twice though :(
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusCreated:
 	case http.StatusNoContent:
 	case http.StatusTooManyRequests:
-		// TODO try again soon
+		return c.do(req, rateLimitPath)
 	default:
-		panic(resp.StatusCode)
+		return nil, errors.Errorf("unexpected status code %q", resp.StatusCode)
 	}
 	return body, nil
 }
