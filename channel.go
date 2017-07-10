@@ -1,35 +1,29 @@
-package digo
+package discgo
 
 import (
-	"github.com/bwmarrin/snowflake"
 	"time"
+
+	"github.com/bwmarrin/snowflake"
 )
 
-// GuildChannel represents an isolated set of users and messages
-// within a Guild.
-type GuildChannel struct {
+// Channel represents a channel in Discord.
+// If Recipient is set this is a DM Channel otherwise this is a Guild Channel.
+// Guild Channel represents an isolated set of users and messages within a Guild.
+// DM Channel represent a one-to-one conversation between two users, outside of the
+// scope of guilds.
+type Channel struct {
 	ID                   snowflake.ID `json:"id"`
 	GuildID              snowflake.ID `json:"guild_id"`
-	Name                 string `json:"name"`
-	Type                 string `json:"type"`
-	Position             int `json:"position"`
-	IsPrivate            bool `json:"is_private"`
+	Name                 string       `json:"name"`
+	Type                 string       `json:"type"`
+	Position             int          `json:"position"`
+	IsPrivate            bool         `json:"is_private"`
 	PermissionOverwrites []*Overwrite `json:"permission_overwrites"`
-	Topic                string `json:"topic"`
+	Topic                string       `json:"topic"`
+	Recipient            *User        `json:"recipient"`
 	LastMessageID        snowflake.ID `json:"last_message_id"`
-	Bitrate              int `json:"bitrate"`
-	UserLimit            int `json:"user_limit"`
-}
-
-// DMChannel represent a one-to-one conversation between two users,
-// outside of the scope of guilds.
-// It could be merged with GuildChannel into a single Channel struct
-// like DiscordGo but that does not match the semantics of the Discord API.
-type DMChannel struct {
-	ID            snowflake.ID
-	IsPrivate     bool
-	Recipient     *User
-	LastMessageID snowflake.ID
+	Bitrate              int          `json:"bitrate"`
+	UserLimit            int          `json:"user_limit"`
 }
 
 // Message represents a message sent in a channel within Discord.

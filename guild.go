@@ -1,4 +1,4 @@
-package digo
+package discgo
 
 import (
 	"time"
@@ -21,16 +21,16 @@ type Guild struct {
 	DefaultMessageNotifications int
 	Roles                       []*Role
 	Emojis                      []*GuildEmoji
-	Features                    []*GuildFeature
+	Features                    []string // not sure if this is right, DiscordGo doesn't have anything
 	MFALevel                    int
-	JoinedAt                    *time.Time // TOOD fix in my PR
+	JoinedAt                    *time.Time
 	Large                       bool
 	Unavailable                 bool
 	MemberCount                 int
 	VoiceStates                 []*VoiceState // without guild_id key
 	Members                     []*GuildMember
-	Channels                    []*GuildChannel
-	Presences                   []*Presence // TODO like presence update event sans a roles or guild_id key
+	Channels                    []*Channel
+	// Presences                   []*Presence // TODO like presence update event sans a roles or guild_id key
 }
 
 type UnavailableGuild struct {
@@ -47,7 +47,7 @@ type GuildMember struct {
 	User     *User
 	Nick     *string
 	Roles    []snowflake.ID
-	JoinedAt time.Time // TOOD fix in my PR
+	JoinedAt time.Time
 	Deaf     bool
 	Mute     bool
 }
@@ -62,19 +62,19 @@ type Integration struct {
 	ExpireBehaviour   int
 	ExpireGracePeriod int
 	User              *User
-	Account           *Account
-	SyncedAt          time.Time // TOOD fix in my PR
+	Account           *IntegrationAccount
+	SyncedAt          time.Time
 }
 
 type IntegrationAccount struct {
-	ID snowflake.ID
+	ID   snowflake.ID
 	Name string
 }
 
 type GuildEmoji struct {
-	ID snowflake.ID
-	Name string
-	Roles []snowflake.ID
+	ID            snowflake.ID
+	Name          string
+	Roles         []snowflake.ID
 	RequireColons bool
-	Managed bool
+	Managed       bool
 }

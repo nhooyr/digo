@@ -1,4 +1,4 @@
-package digo
+package discgo
 
 import "github.com/bwmarrin/snowflake"
 
@@ -22,9 +22,9 @@ type UserGuild struct {
 }
 
 type Connection struct {
-	ID string
-	Name string
-	Types string
-	Revoked bool
+	ID           string
+	Name         string
+	Types        string
+	Revoked      bool
 	Integrations []*Integration
 }

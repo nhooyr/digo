@@ -1,4 +1,4 @@
-package digo
+package discgo
 
 import "github.com/bwmarrin/snowflake"
 

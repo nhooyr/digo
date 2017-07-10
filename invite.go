@@ -1,11 +1,10 @@
-package digo
+package discgo
 
 import (
 	"time"
 
 	"github.com/bwmarrin/snowflake"
 )
-
 
 type Invite struct {
 	Code    string
@@ -19,15 +18,15 @@ type InviteMetadata struct {
 	MaxUses   int
 	MaxAge    int
 	Temporary bool
-	CreatedAt time.Time // TODO type not date time
+	CreatedAt time.Time
 	Revoked   bool
 }
 
 type InviteGuild struct {
 	ID     snowflake.ID
 	Name   string
-	Splash *string // TODO nullable
-	Icon   *string // TODO nullable
+	Splash *string
+	Icon   *string
 }
 
 type InviteChannel struct {

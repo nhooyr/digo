@@ -6,7 +6,7 @@
     <option name="importSorting" value="GOIMPORTS" />
     <option name="moveAllImportsInOneDeclaration" value="true" />
   </component>
-  <component name="ProjectRootManager">
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_1_8" default="false">
     <output url="file://$PROJECT_DIR$/out" />
   </component>
 </project>
