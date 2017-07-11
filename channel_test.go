@@ -1,14 +1,14 @@
 package discgo_test
 
 import (
-	"testing"
-	"os"
 	"github.com/nhooyr/discgo"
+	"os"
+	"testing"
 )
 
 var (
-	cID = "331307058660114433"
-	mID = "334104659767590912"
+	cID   = "331307058660114433"
+	mID   = "334104659767590912"
 	emoji = "🍰"
 )
 

@@ -31,28 +31,25 @@ func NewClient() *Client {
 
 const endpointAPI = "https://discordapp.com/api/"
 
-func (c *Client) newRequest(method, endpoint string, body io.Reader) (*http.Request, error) {
+func (c *Client) newRequest(method, endpoint string, body io.Reader) *http.Request {
 	req, err := http.NewRequest(method, endpointAPI + endpoint, body)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	req.Header.Set("Authorization", c.Token)
 	req.Header.Set("User-Agent", c.UserAgent)
-	return req, nil
+	return req
 }
 
-func (c *Client) newRequestJSON(method, endpoint string, v interface{}) (*http.Request, error) {
+func (c *Client) newRequestJSON(method, endpoint string, v interface{}) *http.Request {
 	body, err := json.Marshal(v)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	req, err := c.newRequest(method, endpoint, bytes.NewBuffer(body))
-	if err != nil {
-		return nil, err
-	}
+	req := c.newRequest(method, endpoint, bytes.NewBuffer(body))
 	// TODO is this necessary?
 	req.Header.Set("Content-Type", "application/json")
-	return req, nil
+	return req
 }
 
 func (c *Client) do(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
@@ -82,7 +79,7 @@ func (c *Client) do(req *http.Request, rateLimitPath string, n int) ([]byte, err
 	case http.StatusTooManyRequests:
 		return c.do(req, rateLimitPath, n)
 	default:
-		return nil, errors.Errorf("unexpected status code %v (%v)", resp.StatusCode, http.StatusText(resp.StatusCode))
+		return nil, errors.Errorf("unexpected status code %v %v", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 	return body, nil
 }
