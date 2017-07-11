@@ -13,10 +13,10 @@ var (
 )
 
 func TestClient_GetChannelMessages(t *testing.T) {
-	pgcms := &discgo.ParamsGetChannelMessages{
+	pgcms := &discgo.ParamsGetMessages{
 		Limit: 5,
 	}
-	msgs, err := c.GetChannelMessages(cID, pgcms)
+	msgs, err := c.GetMessages(cID, pgcms)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,4 +62,30 @@ func TestClient_DeleteReaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestClient_GetReactions(t *testing.T) {
+	users, err := c.GetReactions(cID, mID, emoji)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(users[0].Username)
+}
+
+func TestClient_DeleteReactions(t *testing.T) {
+	err := c.DeleteReactions(cID, mID)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClient_UpdateMessage(t *testing.T) {
+	params := &discgo.ParamsEditMessage{
+		Content: "updated wow",
+	}
+	m, err := c.EditMessage(cID, mID, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(m.Content)
 }

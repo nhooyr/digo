@@ -82,7 +82,7 @@ func (c *Client) do(req *http.Request, rateLimitPath string, n int) ([]byte, err
 	case http.StatusTooManyRequests:
 		return c.do(req, rateLimitPath, n)
 	default:
-		return nil, errors.Errorf("unexpected status code %v", resp.StatusCode)
+		return nil, errors.Errorf("unexpected status code %v (%v)", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 	return body, nil
 }
