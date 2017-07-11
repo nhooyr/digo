@@ -176,7 +176,7 @@ func (c *Client) GetChannel(cID string) (ch *Channel, err error) {
 	return ch, json.Unmarshal(body, &ch)
 }
 
-type ModifyChannelParams struct {
+type ParamsModifyChannel struct {
 	Name      string `json:"name,omitempty"`
 	Position  int    `json:"position,omitempty"`
 	Topic     string `json:"topic,omitempty"`
@@ -184,7 +184,7 @@ type ModifyChannelParams struct {
 	UserLimit int    `json:"user_limit,omitempty"`
 }
 
-func (c *Client) ModifyChannel(cID string, chmp *ModifyChannelParams) error {
+func (c *Client) ModifyChannel(cID string, chmp *ParamsModifyChannel) error {
 	endpoint := endpointChannel(cID)
 	req, err := c.newRequestJSON("PATCH", endpoint, chmp)
 	if err != nil {
@@ -211,14 +211,14 @@ func endpointChannelMessages(cID string) string {
 	return path.Join(endpointChannel(cID), "messages")
 }
 
-type GetChannelMessagesParams struct {
+type ParamsGetChannelMessages struct {
 	AroundID string
 	BeforeID string
 	AfterID  string
 	Limit    int
 }
 
-func (gcmsp *GetChannelMessagesParams) RawQuery() string {
+func (gcmsp *ParamsGetChannelMessages) RawQuery() string {
 	v := make(url.Values)
 	if gcmsp.AroundID != "" {
 		v.Set("around", gcmsp.AroundID)
@@ -235,15 +235,15 @@ func (gcmsp *GetChannelMessagesParams) RawQuery() string {
 	return v.Encode()
 }
 
-func (c *Client) GetChannelMessages(cID string, gcmsp *GetChannelMessagesParams) (msgs []*Message, err error) {
+func (c *Client) GetChannelMessages(cID string, pgcms *ParamsGetChannelMessages) (msgs []*Message, err error) {
 	endpoint := endpointChannelMessages(cID)
 	req, err := c.newRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if gcmsp != nil {
-		req.URL.RawQuery = gcmsp.RawQuery()
+	if pgcms != nil {
+		req.URL.RawQuery = pgcms.RawQuery()
 	}
 
 	body, err := c.do(req, endpoint, 0)
@@ -271,7 +271,7 @@ func (c *Client) GetChannelMessage(cID, mID string) (m *Message, err error) {
 	return m, json.Unmarshal(body, &m)
 }
 
-type CreateMessageParams struct {
+type ParamsCreateMessage struct {
 	Content string `json:"content,omitempty"`
 	Nonce   string `json:"nonce,omitempty"`
 	TTS     bool   `json:"tts,omitempty"`
@@ -279,7 +279,7 @@ type CreateMessageParams struct {
 	Embed   *Embed `json:"embed,omitempty"`
 }
 
-func (c *Client) CreateMessage(cID string, cmp *CreateMessageParams) (m *Message, err error) {
+func (c *Client) CreateMessage(cID string, cmp *ParamsCreateMessage) (m *Message, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
@@ -326,3 +326,43 @@ func (c *Client) CreateMessage(cID string, cmp *CreateMessageParams) (m *Message
 	}
 	return m, json.Unmarshal(body, &m)
 }
+
+func endpointReaction(cID, mID, emoji, uID string) string {
+	return path.Join(endpointChannelMessage(cID, mID), "reactions", emoji, uID)
+}
+
+func (c *Client) CreateReaction(cID, mID, emoji string) error {
+	endpoint := endpointReaction(cID, mID, emoji, "@me")
+	req, err := c.newRequest("PUT", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	rateLimitPath := endpointReaction(cID, "{id}", "{id}", "{id}")
+	_, err = c.do(req, rateLimitPath, 0)
+	return err
+}
+
+// uID = "@me" for your own reaction
+func (c *Client) DeleteReaction(cID, mID, emoji, uID string) error {
+	endpoint := endpointReaction(cID, mID, emoji, uID)
+	req, err := c.newRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	rateLimitPath := endpointReaction(cID, "{id}", "{id}", "{id}")
+	_, err = c.do(req, rateLimitPath, 0)
+	return err
+}
+
+// uID = "@me" for your own reaction
+func (c *Client) GetReactions(cID, mID, emoji string) error {
+	endpoint := endpointReaction(cID, mID, emoji, "TODO")
+	req, err := c.newRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	rateLimitPath := endpointReaction(cID, "{id}", "{id}", "{id}")
+	_, err = c.do(req, rateLimitPath, 0)
+	return err
+}
+
