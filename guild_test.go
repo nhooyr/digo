@@ -19,8 +19,8 @@ func TestClient_CreateGuild(t *testing.T) {
 }
 
 func TestClient_DeleteGuild(t *testing.T) {
-	// TODO I accidently created a bunch of guilds lol
-	g, err := c.DeleteGuild("334475666944819203")
+	// TODO doesn't return any JSON for some reason?
+	g, err := c.DeleteGuild("334474961580195852")
 	if err != nil {
 		t.Fatal(err)
 	}

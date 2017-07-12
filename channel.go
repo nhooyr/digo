@@ -29,10 +29,11 @@ type Channel struct {
 	IsPrivate            bool         `json:"is_private"`
 	PermissionOverwrites []*Overwrite `json:"permission_overwrites"`
 	Topic                string       `json:"topic"`
-	Recipient            *User        `json:"recipient"`
-	LastMessageID        string       `json:"last_message_id"`
-	Bitrate              int          `json:"bitrate"`
-	UserLimit            int          `json:"user_limit"`
+	// TODO i dont like this merger idk maybe they fix in v6?
+	Recipient     *User  `json:"recipient"`
+	LastMessageID string `json:"last_message_id"`
+	Bitrate       int    `json:"bitrate"`
+	UserLimit     int    `json:"user_limit"`
 }
 
 // Message represents a message sent in a channel within Discord.
