@@ -36,7 +36,7 @@ func TestClient_GetChannels(t *testing.T) {
 }
 
 func TestClient_GetGuildMember(t *testing.T) {
-	gm, err := c.GetGuildMember(gID, "97133780153683968")
+	gm, err := c.GetGuildMember(gID, uID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,4 +53,21 @@ func TestClient_GetGuildMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(guildMembers[0].User.Username)
+}
+
+func TestClient_ModifyGuildMember(t *testing.T) {
+	params := &discgo.ParamsModifyGuildMember{
+		Nick: "ggez",
+	}
+	err := c.ModifyGuildMember(gID, "97137587013050368", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClient_ModifyMyNick(t *testing.T) {
+	err := c.ModifyMyNick(gID, "IZIFOOMAR")
+	if err != nil {
+		t.Fatal(err)
+	}
 }

@@ -244,11 +244,39 @@ type ParamsAddGuildMember struct {
 
 func (c *Client) AddGuildMember(gID, uID string, params *ParamsAddGuildMember) (gm *GuildMember, err error) {
 	endpoint := path.Join("guilds", gID, "members", uID)
-	req := c.newRequestJSON("PUT", endpoint, nil)
+	req := c.newRequestJSON("PUT", endpoint, params)
 	rateLimitPath := path.Join("guilds", gID, "members", "*")
 	body, err := c.do(req, rateLimitPath, 0)
 	if err != nil {
 		return nil, err
 	}
 	return gm, json.Unmarshal(body, &gm)
+}
+
+// TODO rename this and all other params to postfix params
+type ParamsModifyGuildMember struct {
+	Nick      string  `json:"nick,omitempty"`
+	Roles     []*Role `json:"roles,omitempty"`
+	Mute      *bool   `json:"mute,omitempty"` // pointer so that you can set false
+	Deaf      *bool   `json:"deaf,omitempty"` // pointer so that you can set false
+	ChannelID string  `json:"channel_id,omitempty"`
+}
+
+func (c *Client) ModifyGuildMember(gID, uID string, params *ParamsModifyGuildMember) error {
+	endpoint := path.Join("guilds", gID, "members", uID)
+	req := c.newRequestJSON("PATCH", endpoint, params)
+	rateLimitPath := path.Join("guilds", gID, "members", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) ModifyMyNick(gID string, nick string) error {
+	endpoint := path.Join("guilds", gID, "members", "@me", "nick")
+	params := map[string]string{"nick": nick}
+	req := c.newRequestJSON("PATCH", endpoint, params)
+	// Discord returns the nickname but I have no idea why that would
+	// be of any use to anyone.
+	// So lets just ignore it.
+	_, err := c.do(req, endpoint, 0)
+	return err
 }
