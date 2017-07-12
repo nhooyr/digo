@@ -51,7 +51,20 @@ func (c *Client) newRequestJSON(method, endpoint string, v interface{}) *http.Re
 	return req
 }
 
-func (c *Client) do(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
+func (c *Client) do(req *http.Request, rateLimitPath string) error {
+	_, err := c.do_n(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) do_unmarshal(req *http.Request, rateLimitPath string, v interface{}) error {
+	body, err := c.do_n(req, rateLimitPath, 0)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, &v)
+}
+
+func (c *Client) do_n(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
 	prl := c.rl.getPathRateLimiter(rateLimitPath)
 	prl.lock()
 	resp, err := c.HttpClient.Do(req)
@@ -74,9 +87,9 @@ func (c *Client) do(req *http.Request, rateLimitPath string, n int) ([]byte, err
 	case http.StatusNoContent:
 	case http.StatusBadGateway:
 		// TODO necessary?
-		return c.do(req, rateLimitPath, n+1)
+		return c.do_n(req, rateLimitPath, n+1)
 	case http.StatusTooManyRequests:
-		return c.do(req, rateLimitPath, n)
+		return c.do_n(req, rateLimitPath, n)
 	default:
 		return nil, errors.Errorf("unexpected status code %v %v", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}

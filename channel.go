@@ -155,11 +155,7 @@ type Attachment struct {
 func (c *Client) GetChannel(cID string) (ch *Channel, err error) {
 	endpoint := path.Join("channels", cID)
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return ch, json.Unmarshal(body, &ch)
+	return ch, c.do_unmarshal(req, endpoint, &ch)
 }
 
 type ParamsModifyChannel struct {
@@ -170,21 +166,16 @@ type ParamsModifyChannel struct {
 	UserLimit int    `json:"user_limit,omitempty"`
 }
 
-func (c *Client) ModifyChannel(cID string, params *ParamsModifyChannel) error {
+func (c *Client) ModifyChannel(cID string, params *ParamsModifyChannel) (ch *Channel, err error) {
 	endpoint := path.Join("channels", cID)
 	req := c.newRequestJSON("PATCH", endpoint, params)
-	_, err := c.do(req, endpoint, 0)
-	return err
+	return c.do_unmarshal(req, endpoint, &ch)
 }
 
 func (c *Client) DeleteChannel(cID string) (ch *Channel, err error) {
 	endpoint := path.Join("channels", cID)
 	req := c.newRequest("DELETE", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return ch, json.Unmarshal(body, &ch)
+	return ch, c.do_unmarshal(req, endpoint, &ch)
 }
 
 type ParamsGetMessages struct {
@@ -211,28 +202,20 @@ func (params *ParamsGetMessages) rawQuery() string {
 	return v.Encode()
 }
 
-func (c *Client) GetMessages(cID string, params *ParamsGetMessages) (msgs []*Message, err error) {
+func (c *Client) GetMessages(cID string, params *ParamsGetMessages) (messages []*Message, err error) {
 	endpoint := path.Join("channels", cID, "messages")
 	req := c.newRequest("GET", endpoint, nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
 	}
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return msgs, json.Unmarshal(body, &msgs)
+	return messages, c.do_unmarshal(req, endpoint, &messages)
 }
 
 func (c *Client) GetMessage(cID, mID string) (m *Message, err error) {
 	endpoint := path.Join("channels", cID, "messages", mID)
 	req := c.newRequest("GET", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "messages", "*")
-	body, err := c.do(req, rateLimitPath, 0)
-	if err != nil {
-		return nil, err
-	}
-	return m, json.Unmarshal(body, &m)
+	return m, c.do_unmarshal(req, rateLimitPath, &m)
 }
 
 type ParamsCreateMessage struct {
@@ -286,19 +269,14 @@ func (c *Client) CreateMessage(cID string, params *ParamsCreateMessage) (m *Mess
 	req := c.newRequest("POST", endpoint, reqBody)
 	req.Header.Set("Content-Type", reqBodyWriter.FormDataContentType())
 
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return m, json.Unmarshal(body, &m)
+	return m, c.do_unmarshal(req, endpoint, &m)
 }
 
 func (c *Client) CreateReaction(cID, mID, emoji string) error {
 	endpoint := path.Join("channels", cID, "messages", mID, "reactions", emoji, "@me")
 	req := c.newRequest("PUT", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions", "*", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 // uID = "@me" for your own reaction
@@ -306,27 +284,21 @@ func (c *Client) DeleteReaction(cID, mID, emoji, uID string) error {
 	endpoint := path.Join("channels", cID, "messages", mID, "reactions", emoji, uID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions", "*", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) GetReactions(cID, mID, emoji string) (users []*User, err error) {
 	endpoint := path.Join("channels", cID, "messages", mID, "reactions", emoji)
 	req := c.newRequest("GET", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions", "*")
-	body, err := c.do(req, rateLimitPath, 0)
-	if err != nil {
-		return nil, err
-	}
-	return users, json.Unmarshal(body, &users)
+	return users, c.do_unmarshal(req, rateLimitPath, &users)
 }
 
 func (c *Client) DeleteReactions(cID, mID string) error {
 	endpoint := path.Join("channels", cID, "messages", mID, "reactions")
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 type ParamsEditMessage struct {
@@ -338,26 +310,20 @@ func (c *Client) EditMessage(cID, mID string, params *ParamsEditMessage) (m *Mes
 	endpoint := path.Join("channels", cID, "messages", mID)
 	req := c.newRequestJSON("PATCH", endpoint, params)
 	rateLimitPath := path.Join("channels", cID, "messages", "*")
-	body, err := c.do(req, rateLimitPath, 0)
-	if err != nil {
-		return nil, err
-	}
-	return m, json.Unmarshal(body, &m)
+	return m, c.do_unmarshal(req, rateLimitPath, &m)
 }
 
 func (c *Client) DeleteMessage(cID, mID string) error {
 	endpoint := path.Join("channels", cID, "messages", mID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "messages", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) BulkDeleteMessages(cID string, mIDs []string) error {
 	endpoint := path.Join("channels", cID, "messages", "bulk-delete")
 	req := c.newRequestJSON("POST", endpoint, mIDs)
-	_, err := c.do(req, endpoint, 0)
-	return err
+	return c.do(req, endpoint)
 }
 
 type ParamsEditPermissions struct {
@@ -370,18 +336,13 @@ func (c *Client) EditPermissions(cID, overwriteID string, params *ParamsEditPerm
 	endpoint := path.Join("channels", cID, "permissions", overwriteID)
 	req := c.newRequestJSON("PUT", endpoint, params)
 	rateLimitPath := path.Join("channels", cID, "permissions", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) GetInvites(cID string) (invites []*Invite, err error) {
 	endpoint := path.Join("channels", cID, "invites")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return invites, json.Unmarshal(body, &invites)
+	return invites, c.do_unmarshal(req, endpoint, &invites)
 }
 
 type ParamsCreateInvite struct {
@@ -394,66 +355,52 @@ type ParamsCreateInvite struct {
 func (c *Client) CreateInvite(cID string, params *ParamsCreateInvite) (invite *Invite, err error) {
 	endpoint := path.Join("channels", cID, "invites")
 	req := c.newRequestJSON("POST", cID, params)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return invite, json.Unmarshal(body, &invite)
+	return invite, c.do_unmarshal(req, endpoint, &invite)
 }
 
 func (c *Client) DeletePermission(cID, overwriteID string) error {
 	endpoint := path.Join("channels", cID, "overwrites", overwriteID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "overwrites", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) TriggerTypingIndicator(cID string) error {
 	endpoint := path.Join("channels", cID, "typing")
 	req := c.newRequest("POST", endpoint, nil)
-	_, err := c.do(req, endpoint, 0)
-	return err
+	return c.do(req, endpoint)
 }
 
 func (c *Client) GetPinnedMessages(cID string) (msgs []*Message, err error) {
 	endpoint := path.Join("channels", cID, "pins")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return msgs, json.Unmarshal(body, &msgs)
+	return msgs, c.do_unmarshal(req, endpoint, &msgs)
 }
 
 func (c *Client) PinMessage(cID, mID string) error {
 	endpoint := path.Join("channels", cID, "pins", mID)
 	req := c.newRequest("PUT", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "pins", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) DeletePinnedMessage(cID, mID string) error {
 	endpoint := path.Join("channels", cID, "pins", mID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "pins", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) AddDMRecipient(cID, uID string) error {
 	endpoint := path.Join("channels", cID, "recipients", uID)
 	req := c.newRequest("PUT", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "recipients", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) RemoveDMRecipient(cID, uID string) error {
 	endpoint := path.Join("channels", cID, "recipients", uID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "recipients", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
