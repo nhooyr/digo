@@ -169,7 +169,7 @@ type ParamsModifyChannel struct {
 func (c *Client) ModifyChannel(cID string, params *ParamsModifyChannel) (ch *Channel, err error) {
 	endpoint := path.Join("channels", cID)
 	req := c.newRequestJSON("PATCH", endpoint, params)
-	return c.doUnmarshal(req, endpoint, &ch)
+	return ch, c.doUnmarshal(req, endpoint, &ch)
 }
 
 func (c *Client) DeleteChannel(cID string) (ch *Channel, err error) {

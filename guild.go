@@ -22,7 +22,7 @@ type Guild struct {
 	DefaultMessageNotifications int
 	Roles                       []*Role
 	Emojis                      []*GuildEmoji
-	Features                    []string      // not sure if this is right, DiscordGo doesn't have anything
+	Features                    []string // not sure if this is right, DiscordGo doesn't have anything
 	MFALevel                    int
 	JoinedAt                    *time.Time
 	Large                       bool
@@ -31,7 +31,7 @@ type Guild struct {
 	VoiceStates                 []*VoiceState // without guild_id key
 	Members                     []*GuildMember
 	Channels                    []*Channel
-	Presences                   []*Presence   // TODO like presence update event sans a roles or guild_id key
+	Presences                   []*Presence // TODO like presence update event sans a roles or guild_id key
 }
 
 type Presence struct {
@@ -46,7 +46,7 @@ type UnavailableGuild struct {
 }
 
 type GuildEmbed struct {
-	Enabled   bool `json:"enabled,omitempty"`
+	Enabled   bool   `json:"enabled,omitempty"`
 	ChannelID string `json:"channel_id,omitempty"`
 }
 
@@ -399,8 +399,8 @@ func (c *Client) CreateGuildIntegration(gID string, params *CreateGuildIntegrati
 
 type ModifyGuildIntegrationParams struct {
 	// TODO impossible to not send or send 0 value :(
-	ExpireBehaviour   int `json:"expire_behaviour,omitempty"`
-	ExpireGracePeriod int `json:"expire_grace_period,omitempty"`
+	ExpireBehaviour   int  `json:"expire_behaviour,omitempty"`
+	ExpireGracePeriod int  `json:"expire_grace_period,omitempty"`
 	EnableEmoticons   bool `json:"enable_emoticons,omitempty"`
 }
 
