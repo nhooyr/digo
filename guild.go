@@ -1,7 +1,6 @@
 package discgo
 
 import (
-	"encoding/json"
 	"net/url"
 	"path"
 	"strconv"
@@ -110,21 +109,13 @@ type ParamsCreateChannel struct {
 func (c *Client) CreateGuild(params ParamsCreateGuild) (g *Guild, err error) {
 	endpoint := "guilds"
 	req := c.newRequestJSON("POST", endpoint, params)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return g, json.Unmarshal(body, &g)
+	return g, c.doUnmarshal(req, endpoint, &g)
 }
 
 func (c *Client) GetGuild(gID string) (g *Guild, err error) {
 	endpoint := path.Join("guilds", gID)
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return g, json.Unmarshal(body, &g)
+	return g, c.doUnmarshal(req, endpoint, &g)
 }
 
 type ParamsModifyGuild struct {
@@ -142,41 +133,25 @@ type ParamsModifyGuild struct {
 func (c *Client) ModifyGuild(gID string, params *ParamsModifyGuild) (g *Guild, err error) {
 	endpoint := path.Join("guilds", gID)
 	req := c.newRequestJSON("PATACH", endpoint, params)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return g, json.Unmarshal(body, &g)
+	return g, c.doUnmarshal(req, endpoint, &g)
 }
 
 func (c *Client) DeleteGuild(gID string) (g *Guild, err error) {
 	endpoint := path.Join("guilds", gID)
 	req := c.newRequest("DELETE", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return g, json.Unmarshal(body, &g)
+	return g, c.doUnmarshal(req, endpoint, &g)
 }
 
 func (c *Client) GetChannels(gID string) (channels []*Channel, err error) {
 	endpoint := path.Join("guilds", gID, "channels")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return channels, json.Unmarshal(body, &channels)
+	return channels, c.doUnmarshal(req, endpoint, &channels)
 }
 
 func (c *Client) CreateChannel(gID string, params *ParamsCreateChannel) (ch *Channel, err error) {
 	endpoint := path.Join("guilds", gID, "channels")
 	req := c.newRequestJSON("POST", endpoint, params)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return ch, json.Unmarshal(body, &ch)
+	return ch, c.doUnmarshal(req, endpoint, &ch)
 }
 
 // TODO perhaps just use a channel struct?
@@ -189,24 +164,17 @@ type ParamsModifyChannelPositions struct {
 func (c *Client) ModifyChannelPositions(gID string, params *ParamsModifyChannelPositions) (channels *Channel, err error) {
 	endpoint := path.Join("guilds", gID, "channels")
 	req := c.newRequestJSON("PATCH", endpoint, params)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return channels, json.Unmarshal(body, &channels)
+	return channels, c.doUnmarshal(req, endpoint, &channels)
 }
 
 func (c *Client) GetGuildMember(gID, uID string) (gm *GuildMember, err error) {
 	endpoint := path.Join("guilds", gID, "members", uID)
 	req := c.newRequest("GET", endpoint, nil)
 	rateLimitPath := path.Join("guilds", gID, "members", "*")
-	body, err := c.do(req, rateLimitPath, 0)
-	if err != nil {
-		return nil, err
-	}
-	return gm, json.Unmarshal(body, &gm)
+	return gm, c.doUnmarshal(req, rateLimitPath, &gm)
 }
 
+// TODO necessary???
 type ParamsGetGuildMembers struct {
 	Limit   int
 	AfterID string
@@ -229,11 +197,7 @@ func (c *Client) GetGuildMembers(gID string, params *ParamsGetGuildMembers) (gui
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
 	}
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return guildMembers, json.Unmarshal(body, &guildMembers)
+	return guildMembers, c.doUnmarshal(req, endpoint, &guildMembers)
 }
 
 type ParamsAddGuildMember struct {
@@ -248,11 +212,7 @@ func (c *Client) AddGuildMember(gID, uID string, params *ParamsAddGuildMember) (
 	endpoint := path.Join("guilds", gID, "members", uID)
 	req := c.newRequestJSON("PUT", endpoint, params)
 	rateLimitPath := path.Join("guilds", gID, "members", "*")
-	body, err := c.do(req, rateLimitPath, 0)
-	if err != nil {
-		return nil, err
-	}
-	return gm, json.Unmarshal(body, &gm)
+	return gm, c.doUnmarshal(req, rateLimitPath, &gm)
 }
 
 // TODO rename this and all other params to postfix params
@@ -268,8 +228,7 @@ func (c *Client) ModifyGuildMember(gID, uID string, params *ParamsModifyGuildMem
 	endpoint := path.Join("guilds", gID, "members", uID)
 	req := c.newRequestJSON("PATCH", endpoint, params)
 	rateLimitPath := path.Join("guilds", gID, "members", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) ModifyMyNick(gID string, nick string) (newNick string, err error) {
@@ -280,45 +239,34 @@ func (c *Client) ModifyMyNick(gID string, nick string) (newNick string, err erro
 		Nick: nick,
 	}
 	req := c.newRequestJSON("PATCH", endpoint, nickStruct)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return "", err
-	}
-	return nickStruct.Nick, json.Unmarshal(body, &nickStruct)
+	return nickStruct.Nick, c.doUnmarshal(req, endpoint, &nickStruct)
 }
 
 func (c *Client) AddGuildMemberRole(gID, uID, roleID string) error {
 	endpoint := path.Join("guilds", gID, "members", uID, "roles", roleID)
 	req := c.newRequest("PUT", endpoint, nil)
 	rateLimitPath := path.Join("guilds", gID, "members", "*", "roles", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) RemoveGuildMemberRole(gID, uID, roleID string) error {
 	endpoint := path.Join("guilds", gID, "members", uID, "roles", roleID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("guilds", gID, "members", "*", "roles", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) RemoveGuildMember(gID, uID string) error {
 	endpoint := path.Join("guilds", gID, "members", uID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("guilds", gID, "members", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) GetGuildBans(gID string) (users []*User, err error) {
 	endpoint := path.Join("guilds", gID, "bans")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return users, json.Unmarshal(body, &users)
+	return users, c.doUnmarshal(req, endpoint, &users)
 }
 
 type CreateGuildBanParams struct {
@@ -329,26 +277,20 @@ func (c *Client) CreateGuildBan(gID, uID string, params *CreateGuildBanParams) e
 	endpoint := path.Join("guilds", gID, "bans", uID)
 	req := c.newRequestJSON("PUT", endpoint, params)
 	rateLimitPath := path.Join("guilds", gID, "bans", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) RemoveGuildBan(gID, uID string) error {
 	endpoint := path.Join("guilds", gID, "bans", uID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("guilds", gID, "bans", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) GetGuildRoles(gID string) (roles []*Role, err error) {
 	endpoint := path.Join("guilds", gID, "roles")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return roles, json.Unmarshal(body, &roles)
+	return roles, c.doUnmarshal(req, endpoint, &roles)
 }
 
 type CreateGuildRoleParams struct {
@@ -362,11 +304,7 @@ type CreateGuildRoleParams struct {
 func (c *Client) CreateGuildRole(gID string, params *CreateGuildRoleParams) (r *Role, err error) {
 	endpoint := path.Join("guilds", gID, "roles")
 	req := c.newRequestJSON("POST", endpoint, params)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return r, json.Unmarshal(body, &r)
+	return r, c.doUnmarshal(req, endpoint, &r)
 }
 
 type ModifyGuildRolePositionsParams struct {
@@ -377,11 +315,7 @@ type ModifyGuildRolePositionsParams struct {
 func (c *Client) ModifyGuildRolePositions(gID string, params *ModifyGuildRolePositionsParams) (roles []*Role, err error) {
 	endpoint := path.Join("guilds", gID, "roles")
 	req := c.newRequestJSON("PATCH", endpoint, params)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return roles, json.Unmarshal(body, &roles)
+	return roles, c.doUnmarshal(req, endpoint, &roles)
 }
 
 type ModifyGuildRoleParams struct {
@@ -396,19 +330,14 @@ func (c *Client) ModifyGuildRole(gID, roleID string, params *ModifyGuildRolePara
 	endpoint := path.Join("guilds", gID, "roles", roleID)
 	req := c.newRequestJSON("PATCH", endpoint, params)
 	rateLimitPath := path.Join("guilds", gID, "roles", "*")
-	body, err := c.do(req, rateLimitPath, 0)
-	if err != nil {
-		return nil, err
-	}
-	return r, json.Unmarshal(body, &r)
+	return r, c.doUnmarshal(req, rateLimitPath, &r)
 }
 
 func (c *Client) DeleteGuildRole(gID, roleID string) error {
 	endpoint := path.Join("guilds", gID, "roles", roleID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("guilds", gID, "roles", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) GetGuildPruneCount(gID string, days int) (pruned int, err error) {
@@ -419,14 +348,10 @@ func (c *Client) GetGuildPruneCount(gID string, days int) (pruned int, err error
 		v.Set("days", strconv.Itoa(days))
 		req.URL.RawQuery = v.Encode()
 	}
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return 0, err
-	}
 	prunedStruct := struct {
 		Pruned int `json:"pruned"`
 	}{}
-	return prunedStruct.Pruned, json.Unmarshal(body, &prunedStruct)
+	return prunedStruct.Pruned, c.doUnmarshal(req, endpoint, &prunedStruct)
 }
 
 func (c *Client) BeginGuildPrune(gID string, days int) (pruned int, err error) {
@@ -437,44 +362,28 @@ func (c *Client) BeginGuildPrune(gID string, days int) (pruned int, err error) {
 		v.Set("days", strconv.Itoa(days))
 		req.URL.RawQuery = v.Encode()
 	}
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return 0, err
-	}
 	prunedStruct := struct {
 		Pruned int `json:"pruned"`
 	}{}
-	return prunedStruct.Pruned, json.Unmarshal(body, &prunedStruct)
+	return prunedStruct.Pruned, c.doUnmarshal(req, endpoint, &prunedStruct)
 }
 
 func (c *Client) Name(gID string) (voiceRegions []*VoiceRegion, err error) {
 	endpoint := path.Join("guilds", gID, "regions")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return voiceRegions, json.Unmarshal(body, &voiceRegions)
+	return voiceRegions, c.doUnmarshal(req, endpoint, &voiceRegions)
 }
 
 func (c *Client) GetGuildInvites(gID string) (invites []*Invite, err error) {
 	endpoint := path.Join("guilds", gID, "invites")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return invites, json.Unmarshal(body, &invites)
+	return invites, c.doUnmarshal(req, endpoint, &invites)
 }
 
 func (c *Client) GetGuildIntegrations(gID string) (integrations []*Integration, err error) {
 	endpoint := path.Join("guilds", gID, "integrations")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return integrations, json.Unmarshal(body, &integrations)
+	return integrations, c.doUnmarshal(req, endpoint, &integrations)
 }
 
 type CreateGuildIntegrationParams struct {
@@ -485,8 +394,7 @@ type CreateGuildIntegrationParams struct {
 func (c *Client) CreateGuildIntegration(gID string, params *CreateGuildIntegrationParams) error {
 	endpoint := path.Join("guilds", gID, "integrations")
 	req := c.newRequestJSON("POST", endpoint, params)
-	_, err := c.do(req, endpoint, 0)
-	return err
+	return c.do(req, endpoint)
 }
 
 type ModifyGuildIntegrationParams struct {
@@ -500,42 +408,31 @@ func (c *Client) ModifyGuildIntegration(gID, integrationID string, params *Modif
 	endpoint := path.Join("guilds", gID, "integrations", integrationID)
 	req := c.newRequestJSON("PATCH", endpoint, params)
 	rateLimitPath := path.Join("guilds", gID, "integrations", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) DeleteGuildIntegration(gID, integrationID string) error {
 	endpoint := path.Join("guilds", gID, "integrations", integrationID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("guilds", gID, "integrations", "*")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) SyncGuildIntegration(gID, integrationID string) error {
 	endpoint := path.Join("guilds", gID, "integrations", integrationID, "sync")
 	req := c.newRequest("POST", endpoint, nil)
 	rateLimitPath := path.Join("guilds", gID, "integrations", "*", "sync")
-	_, err := c.do(req, rateLimitPath, 0)
-	return err
+	return c.do(req, rateLimitPath)
 }
 
 func (c *Client) GetGuildEmbed(gID string) (ge *GuildEmbed, err error) {
 	endpoint := path.Join("guilds", gID, "embed")
 	req := c.newRequest("GET", endpoint, nil)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return ge, json.Unmarshal(body, &ge)
+	return ge, c.doUnmarshal(req, endpoint, &ge)
 }
 
 func (c *Client) ModifyGuildEmbed(gID string, ge *GuildEmbed) (newGE *GuildEmbed, err error) {
 	endpoint := path.Join("guilds", gID, "embed")
 	req := c.newRequestJSON("PATCH", endpoint, ge)
-	body, err := c.do(req, endpoint, 0)
-	if err != nil {
-		return nil, err
-	}
-	return newGE, json.Unmarshal(body, &ge)
+	return newGE, c.doUnmarshal(req, endpoint, &newGE)
 }

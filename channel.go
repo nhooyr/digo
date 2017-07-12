@@ -155,7 +155,7 @@ type Attachment struct {
 func (c *Client) GetChannel(cID string) (ch *Channel, err error) {
 	endpoint := path.Join("channels", cID)
 	req := c.newRequest("GET", endpoint, nil)
-	return ch, c.do_unmarshal(req, endpoint, &ch)
+	return ch, c.doUnmarshal(req, endpoint, &ch)
 }
 
 type ParamsModifyChannel struct {
@@ -169,13 +169,13 @@ type ParamsModifyChannel struct {
 func (c *Client) ModifyChannel(cID string, params *ParamsModifyChannel) (ch *Channel, err error) {
 	endpoint := path.Join("channels", cID)
 	req := c.newRequestJSON("PATCH", endpoint, params)
-	return c.do_unmarshal(req, endpoint, &ch)
+	return c.doUnmarshal(req, endpoint, &ch)
 }
 
 func (c *Client) DeleteChannel(cID string) (ch *Channel, err error) {
 	endpoint := path.Join("channels", cID)
 	req := c.newRequest("DELETE", endpoint, nil)
-	return ch, c.do_unmarshal(req, endpoint, &ch)
+	return ch, c.doUnmarshal(req, endpoint, &ch)
 }
 
 type ParamsGetMessages struct {
@@ -208,14 +208,14 @@ func (c *Client) GetMessages(cID string, params *ParamsGetMessages) (messages []
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
 	}
-	return messages, c.do_unmarshal(req, endpoint, &messages)
+	return messages, c.doUnmarshal(req, endpoint, &messages)
 }
 
 func (c *Client) GetMessage(cID, mID string) (m *Message, err error) {
 	endpoint := path.Join("channels", cID, "messages", mID)
 	req := c.newRequest("GET", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "messages", "*")
-	return m, c.do_unmarshal(req, rateLimitPath, &m)
+	return m, c.doUnmarshal(req, rateLimitPath, &m)
 }
 
 type ParamsCreateMessage struct {
@@ -269,7 +269,7 @@ func (c *Client) CreateMessage(cID string, params *ParamsCreateMessage) (m *Mess
 	req := c.newRequest("POST", endpoint, reqBody)
 	req.Header.Set("Content-Type", reqBodyWriter.FormDataContentType())
 
-	return m, c.do_unmarshal(req, endpoint, &m)
+	return m, c.doUnmarshal(req, endpoint, &m)
 }
 
 func (c *Client) CreateReaction(cID, mID, emoji string) error {
@@ -291,7 +291,7 @@ func (c *Client) GetReactions(cID, mID, emoji string) (users []*User, err error)
 	endpoint := path.Join("channels", cID, "messages", mID, "reactions", emoji)
 	req := c.newRequest("GET", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions", "*")
-	return users, c.do_unmarshal(req, rateLimitPath, &users)
+	return users, c.doUnmarshal(req, rateLimitPath, &users)
 }
 
 func (c *Client) DeleteReactions(cID, mID string) error {
@@ -310,7 +310,7 @@ func (c *Client) EditMessage(cID, mID string, params *ParamsEditMessage) (m *Mes
 	endpoint := path.Join("channels", cID, "messages", mID)
 	req := c.newRequestJSON("PATCH", endpoint, params)
 	rateLimitPath := path.Join("channels", cID, "messages", "*")
-	return m, c.do_unmarshal(req, rateLimitPath, &m)
+	return m, c.doUnmarshal(req, rateLimitPath, &m)
 }
 
 func (c *Client) DeleteMessage(cID, mID string) error {
@@ -342,7 +342,7 @@ func (c *Client) EditPermissions(cID, overwriteID string, params *ParamsEditPerm
 func (c *Client) GetInvites(cID string) (invites []*Invite, err error) {
 	endpoint := path.Join("channels", cID, "invites")
 	req := c.newRequest("GET", endpoint, nil)
-	return invites, c.do_unmarshal(req, endpoint, &invites)
+	return invites, c.doUnmarshal(req, endpoint, &invites)
 }
 
 type ParamsCreateInvite struct {
@@ -355,7 +355,7 @@ type ParamsCreateInvite struct {
 func (c *Client) CreateInvite(cID string, params *ParamsCreateInvite) (invite *Invite, err error) {
 	endpoint := path.Join("channels", cID, "invites")
 	req := c.newRequestJSON("POST", cID, params)
-	return invite, c.do_unmarshal(req, endpoint, &invite)
+	return invite, c.doUnmarshal(req, endpoint, &invite)
 }
 
 func (c *Client) DeletePermission(cID, overwriteID string) error {
@@ -374,7 +374,7 @@ func (c *Client) TriggerTypingIndicator(cID string) error {
 func (c *Client) GetPinnedMessages(cID string) (msgs []*Message, err error) {
 	endpoint := path.Join("channels", cID, "pins")
 	req := c.newRequest("GET", endpoint, nil)
-	return msgs, c.do_unmarshal(req, endpoint, &msgs)
+	return msgs, c.doUnmarshal(req, endpoint, &msgs)
 }
 
 func (c *Client) PinMessage(cID, mID string) error {
