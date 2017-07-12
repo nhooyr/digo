@@ -22,7 +22,7 @@ type Client struct {
 	UserAgent  string
 	HttpClient *http.Client
 
-	rl         *rateLimiter
+	rl *rateLimiter
 }
 
 func NewClient() *Client {
@@ -32,7 +32,7 @@ func NewClient() *Client {
 const endpointAPI = "https://discordapp.com/api/"
 
 func (c *Client) newRequest(method, endpoint string, body io.Reader) *http.Request {
-	req, err := http.NewRequest(method, endpointAPI + endpoint, body)
+	req, err := http.NewRequest(method, endpointAPI+endpoint, body)
 	if err != nil {
 		panic(err)
 	}
@@ -47,7 +47,6 @@ func (c *Client) newRequestJSON(method, endpoint string, v interface{}) *http.Re
 		panic(err)
 	}
 	req := c.newRequest(method, endpoint, bytes.NewBuffer(body))
-	// TODO is this necessary?
 	req.Header.Set("Content-Type", "application/json")
 	return req
 }
@@ -75,7 +74,7 @@ func (c *Client) do(req *http.Request, rateLimitPath string, n int) ([]byte, err
 	case http.StatusNoContent:
 	case http.StatusBadGateway:
 		// TODO necessary?
-		return c.do(req, rateLimitPath, n + 1)
+		return c.do(req, rateLimitPath, n+1)
 	case http.StatusTooManyRequests:
 		return c.do(req, rateLimitPath, n)
 	default:

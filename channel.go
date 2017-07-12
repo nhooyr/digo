@@ -385,8 +385,8 @@ func (c *Client) GetInvites(cID string) (invites []*Invite, err error) {
 }
 
 type ParamsCreateInvite struct {
-	MaxAge    int `json:"max_age,omitempty"`
-	MaxUses   int `json:"max_uses,omitempty"`
+	MaxAge    int  `json:"max_age,omitempty"`
+	MaxUses   int  `json:"max_uses,omitempty"`
 	Temporary bool `json:"temporary,omitempty"`
 	Unique    bool `json:"unique,omitempty"`
 }
@@ -442,7 +442,7 @@ func (c *Client) DeletePinnedMessage(cID, mID string) error {
 	return err
 }
 
-func (c *Client) AddRecipient(cID, uID string) error {
+func (c *Client) AddDMRecipient(cID, uID string) error {
 	endpoint := path.Join("channels", cID, "recipients", uID)
 	req := c.newRequest("PUT", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "recipients", "*")
@@ -450,7 +450,7 @@ func (c *Client) AddRecipient(cID, uID string) error {
 	return err
 }
 
-func (c *Client) RemoveRecipient(cID, uID string) error {
+func (c *Client) RemoveDMRecipient(cID, uID string) error {
 	endpoint := path.Join("channels", cID, "recipients", uID)
 	req := c.newRequest("DELETE", endpoint, nil)
 	rateLimitPath := path.Join("channels", cID, "recipients", "*")
