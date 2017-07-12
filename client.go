@@ -11,6 +11,7 @@ import (
 
 	// TODO gotta use this package everywhere
 	"github.com/pkg/errors"
+	"time"
 )
 
 const Version = "0.1.0"
@@ -26,7 +27,11 @@ type Client struct {
 }
 
 func NewClient() *Client {
-	return &Client{rl: newRateLimiter(), UserAgent: defaultUserAgent}
+	return &Client{
+		UserAgent:  defaultUserAgent,
+		HttpClient: &http.Client{Timeout: 20 * time.Second},
+		rl:         newRateLimiter(),
+	}
 }
 
 const endpointAPI = "https://discordapp.com/api/"
@@ -82,11 +87,10 @@ func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, er
 		return nil, err
 	}
 	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusCreated:
-	case http.StatusNoContent:
+	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
 	case http.StatusBadGateway:
 		// TODO necessary?
+		// TODO think about whether necessary to handle bad gateway and whether to increase n on too many requests
 		return c.doN(req, rateLimitPath, n+1)
 	case http.StatusTooManyRequests:
 		return c.doN(req, rateLimitPath, n)
