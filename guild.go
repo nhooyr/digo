@@ -23,7 +23,7 @@ type Guild struct {
 	DefaultMessageNotifications int
 	Roles                       []*Role
 	Emojis                      []*GuildEmoji
-	Features                    []string // not sure if this is right, DiscordGo doesn't have anything
+	Features                    []string      // not sure if this is right, DiscordGo doesn't have anything
 	MFALevel                    int
 	JoinedAt                    *time.Time
 	Large                       bool
@@ -32,7 +32,7 @@ type Guild struct {
 	VoiceStates                 []*VoiceState // without guild_id key
 	Members                     []*GuildMember
 	Channels                    []*Channel
-	Presences                   []*Presence // TODO like presence update event sans a roles or guild_id key
+	Presences                   []*Presence   // TODO like presence update event sans a roles or guild_id key
 }
 
 type Presence struct {
@@ -47,8 +47,8 @@ type UnavailableGuild struct {
 }
 
 type GuildEmbed struct {
-	Enabled   bool
-	ChannelID string
+	Enabled   bool `json:"enabled,omitempty"`
+	ChannelID string `json:"channel_id,omitempty"`
 }
 
 type GuildMember struct {
@@ -105,6 +105,8 @@ type ParamsCreateChannel struct {
 	PermissionOverwrites []*Overwrite `json:"permission_overwrites,omitempty"`
 }
 
+// TODO Docs for this are not clear on what the Channels field should be, and the link for
+// that field is broken.
 func (c *Client) CreateGuild(params ParamsCreateGuild) (g *Guild, err error) {
 	endpoint := "guilds"
 	req := c.newRequestJSON("POST", endpoint, params)
@@ -270,13 +272,270 @@ func (c *Client) ModifyGuildMember(gID, uID string, params *ParamsModifyGuildMem
 	return err
 }
 
-func (c *Client) ModifyMyNick(gID string, nick string) error {
+func (c *Client) ModifyMyNick(gID string, nick string) (newNick string, err error) {
 	endpoint := path.Join("guilds", gID, "members", "@me", "nick")
-	params := map[string]string{"nick": nick}
+	nickStruct := struct {
+		Nick string `json:"nick"`
+	}{
+		Nick: nick,
+	}
+	req := c.newRequestJSON("PATCH", endpoint, nickStruct)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return "", err
+	}
+	return nickStruct.Nick, json.Unmarshal(body, &nickStruct)
+}
+
+func (c *Client) AddGuildMemberRole(gID, uID, roleID string) error {
+	endpoint := path.Join("guilds", gID, "members", uID, "roles", roleID)
+	req := c.newRequest("PUT", endpoint, nil)
+	rateLimitPath := path.Join("guilds", gID, "members", "*", "roles", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) RemoveGuildMemberRole(gID, uID, roleID string) error {
+	endpoint := path.Join("guilds", gID, "members", uID, "roles", roleID)
+	req := c.newRequest("DELETE", endpoint, nil)
+	rateLimitPath := path.Join("guilds", gID, "members", "*", "roles", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) RemoveGuildMember(gID, uID string) error {
+	endpoint := path.Join("guilds", gID, "members", uID)
+	req := c.newRequest("DELETE", endpoint, nil)
+	rateLimitPath := path.Join("guilds", gID, "members", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) GetGuildBans(gID string) (users []*User, err error) {
+	endpoint := path.Join("guilds", gID, "bans")
+	req := c.newRequest("GET", endpoint, nil)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return users, json.Unmarshal(body, &users)
+}
+
+type CreateGuildBanParams struct {
+	DeleteMessageDays int `json:"delete-message-days"`
+}
+
+func (c *Client) CreateGuildBan(gID, uID string, params *CreateGuildBanParams) error {
+	endpoint := path.Join("guilds", gID, "bans", uID)
+	req := c.newRequestJSON("PUT", endpoint, params)
+	rateLimitPath := path.Join("guilds", gID, "bans", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) RemoveGuildBan(gID, uID string) error {
+	endpoint := path.Join("guilds", gID, "bans", uID)
+	req := c.newRequest("DELETE", endpoint, nil)
+	rateLimitPath := path.Join("guilds", gID, "bans", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) GetGuildRoles(gID string) (roles []*Role, err error) {
+	endpoint := path.Join("guilds", gID, "roles")
+	req := c.newRequest("GET", endpoint, nil)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return roles, json.Unmarshal(body, &roles)
+}
+
+type CreateGuildRoleParams struct {
+	Name        string `json:"name"`
+	Permissions int    `json:"permissions"`
+	Color       int    `json:"color"`
+	Hoist       bool   `json:"hoist"`
+	Mentionable bool   `json:"mentionable"`
+}
+
+func (c *Client) CreateGuildRole(gID string, params *CreateGuildRoleParams) (r *Role, err error) {
+	endpoint := path.Join("guilds", gID, "roles")
+	req := c.newRequestJSON("POST", endpoint, params)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return r, json.Unmarshal(body, &r)
+}
+
+type ModifyGuildRolePositionsParams struct {
+	ID       string `json:"id"`
+	Position int    `json:"position"`
+}
+
+func (c *Client) ModifyGuildRolePositions(gID string, params *ModifyGuildRolePositionsParams) (roles []*Role, err error) {
+	endpoint := path.Join("guilds", gID, "roles")
 	req := c.newRequestJSON("PATCH", endpoint, params)
-	// Discord returns the nickname but I have no idea why that would
-	// be of any use to anyone.
-	// So lets just ignore it.
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return roles, json.Unmarshal(body, &roles)
+}
+
+type ModifyGuildRoleParams struct {
+	Name        string `json:"name"`
+	Permissions int    `json:"permissions"`
+	Color       int    `json:"color"`
+	Hoist       bool   `json:"hoist"`
+	Mentionable bool   `json:"mentionable"`
+}
+
+func (c *Client) ModifyGuildRole(gID, roleID string, params *ModifyGuildRoleParams) (r *Role, err error) {
+	endpoint := path.Join("guilds", gID, "roles", roleID)
+	req := c.newRequestJSON("PATCH", endpoint, params)
+	rateLimitPath := path.Join("guilds", gID, "roles", "*")
+	body, err := c.do(req, rateLimitPath, 0)
+	if err != nil {
+		return nil, err
+	}
+	return r, json.Unmarshal(body, &r)
+}
+
+func (c *Client) DeleteGuildRole(gID, roleID string) error {
+	endpoint := path.Join("guilds", gID, "roles", roleID)
+	req := c.newRequest("DELETE", endpoint, nil)
+	rateLimitPath := path.Join("guilds", gID, "roles", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) GetGuildPruneCount(gID string, days int) (pruned int, err error) {
+	endpoint := path.Join("guilds", gID, "prune")
+	req := c.newRequest("GET", endpoint, nil)
+	if days > 0 {
+		v := url.Values{}
+		v.Set("days", strconv.Itoa(days))
+		req.URL.RawQuery = v.Encode()
+	}
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return 0, err
+	}
+	prunedStruct := struct {
+		Pruned int `json:"pruned"`
+	}{}
+	return prunedStruct.Pruned, json.Unmarshal(body, &prunedStruct)
+}
+
+func (c *Client) BeginGuildPrune(gID string, days int) (pruned int, err error) {
+	endpoint := path.Join("guilds", gID, "prune")
+	req := c.newRequest("POST", endpoint, nil)
+	if days > 0 {
+		v := url.Values{}
+		v.Set("days", strconv.Itoa(days))
+		req.URL.RawQuery = v.Encode()
+	}
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return 0, err
+	}
+	prunedStruct := struct {
+		Pruned int `json:"pruned"`
+	}{}
+	return prunedStruct.Pruned, json.Unmarshal(body, &prunedStruct)
+}
+
+func (c *Client) Name(gID string) (voiceRegions []*VoiceRegion, err error) {
+	endpoint := path.Join("guilds", gID, "regions")
+	req := c.newRequest("GET", endpoint, nil)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return voiceRegions, json.Unmarshal(body, &voiceRegions)
+}
+
+func (c *Client) GetGuildInvites(gID string) (invites []*Invite, err error) {
+	endpoint := path.Join("guilds", gID, "invites")
+	req := c.newRequest("GET", endpoint, nil)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return invites, json.Unmarshal(body, &invites)
+}
+
+func (c *Client) GetGuildIntegrations(gID string) (integrations []*Integration, err error) {
+	endpoint := path.Join("guilds", gID, "integrations")
+	req := c.newRequest("GET", endpoint, nil)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return integrations, json.Unmarshal(body, &integrations)
+}
+
+type CreateGuildIntegrationParams struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+func (c *Client) CreateGuildIntegration(gID string, params *CreateGuildIntegrationParams) error {
+	endpoint := path.Join("guilds", gID, "integrations")
+	req := c.newRequestJSON("POST", endpoint, params)
 	_, err := c.do(req, endpoint, 0)
 	return err
+}
+
+type ModifyGuildIntegrationParams struct {
+	// TODO impossible to not send or send 0 value :(
+	ExpireBehaviour   int `json:"expire_behaviour,omitempty"`
+	ExpireGracePeriod int `json:"expire_grace_period,omitempty"`
+	EnableEmoticons   bool `json:"enable_emoticons,omitempty"`
+}
+
+func (c *Client) ModifyGuildIntegration(gID, integrationID string, params *ModifyGuildIntegrationParams) error {
+	endpoint := path.Join("guilds", gID, "integrations", integrationID)
+	req := c.newRequestJSON("PATCH", endpoint, params)
+	rateLimitPath := path.Join("guilds", gID, "integrations", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) DeleteGuildIntegration(gID, integrationID string) error {
+	endpoint := path.Join("guilds", gID, "integrations", integrationID)
+	req := c.newRequest("DELETE", endpoint, nil)
+	rateLimitPath := path.Join("guilds", gID, "integrations", "*")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) SyncGuildIntegration(gID, integrationID string) error {
+	endpoint := path.Join("guilds", gID, "integrations", integrationID, "sync")
+	req := c.newRequest("POST", endpoint, nil)
+	rateLimitPath := path.Join("guilds", gID, "integrations", "*", "sync")
+	_, err := c.do(req, rateLimitPath, 0)
+	return err
+}
+
+func (c *Client) GetGuildEmbed(gID string) (ge *GuildEmbed, err error) {
+	endpoint := path.Join("guilds", gID, "embed")
+	req := c.newRequest("GET", endpoint, nil)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return ge, json.Unmarshal(body, &ge)
+}
+
+func (c *Client) ModifyGuildEmbed(gID string, ge *GuildEmbed) (newGE *GuildEmbed, err error) {
+	endpoint := path.Join("guilds", gID, "embed")
+	req := c.newRequestJSON("PATCH", endpoint, ge)
+	body, err := c.do(req, endpoint, 0)
+	if err != nil {
+		return nil, err
+	}
+	return newGE, json.Unmarshal(body, &ge)
 }

@@ -66,8 +66,9 @@ func TestClient_ModifyGuildMember(t *testing.T) {
 }
 
 func TestClient_ModifyMyNick(t *testing.T) {
-	err := c.ModifyMyNick(gID, "IZIFOOMAR")
+	nick, err := c.ModifyMyNick(gID, "LOL REKT")
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log(nick)
 }
