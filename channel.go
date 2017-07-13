@@ -187,6 +187,16 @@ func (e *ChannelEndpoint) Delete() (ch *Channel, err error) {
 	return ch, e.c.doUnmarshal(req, e.rateLimitPath, &ch)
 }
 
+type MessagesEndpoint struct {
+	c             *Client
+	endpoint      string
+	rateLimitPath string
+}
+
+func (e *ChannelEndpoint) Messages() {
+
+}
+
 type ParamsGetMessages struct {
 	AroundID string
 	BeforeID string
