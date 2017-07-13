@@ -161,7 +161,6 @@ type ParamsModifyChannelPositions struct {
 	Position int    `json:"position"`
 }
 
-// TODO rename this and other function to reorder
 func (c *Client) ModifyChannelPositions(gID string, params *ParamsModifyChannelPositions) (channels *Channel, err error) {
 	endpoint := path.Join("guilds", gID, "channels")
 	req := c.newRequestJSON("PATCH", endpoint, params)

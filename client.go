@@ -10,7 +10,6 @@ import (
 	"bytes"
 
 	// TODO gotta use this package everywhere
-	"github.com/pkg/errors"
 	"time"
 )
 
@@ -89,13 +88,19 @@ func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, er
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
 	case http.StatusBadGateway:
-		// TODO necessary?
-		// TODO think about whether necessary to handle bad gateway and whether to increase n on too many requests
 		return c.doN(req, rateLimitPath, n+1)
 	case http.StatusTooManyRequests:
+		// Do not increment n because the next request should always be tried.
 		return c.doN(req, rateLimitPath, n)
 	default:
-		return nil, errors.Errorf("unexpected status code %v %v", resp.StatusCode, http.StatusText(resp.StatusCode))
+		err := &APIError{
+			Request:  req,
+			Response: resp,
+			Body:     body,
+		}
+		// Ignore error because we may not have a error response at all.
+		_ = json.Unmarshal(body, &err.JSON)
+		return nil, err
 	}
 	return body, nil
 }
@@ -105,4 +110,25 @@ func safeClose(closeFunc func() error, err *error) {
 	if cerr != nil && *err == nil {
 		*err = cerr
 	}
+}
+
+type APIErrorJSON struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+type APIError struct {
+	Request  *http.Request
+	Response *http.Response
+	Body     []byte
+
+	JSON *APIErrorJSON
+}
+
+func (err *APIError) Error() string {
+	if err.JSON == nil {
+		code := err.Response.StatusCode
+		return fmt.Sprintf("Unexpected response %v %v", code, http.StatusText(code))
+	}
+	return fmt.Sprintf("Error code: %v, message: %v", err.JSON.Code, err.JSON.Message)
 }

@@ -16,10 +16,11 @@ import (
 )
 
 // Channel represents a channel in Discord.
-// If Recipient is set this is a DM Channel otherwise this is a Guild Channel.
+// If IsPrivate is set this is a DM Channel otherwise this is a Guild Channel.
 // Guild Channel represents an isolated set of users and messages within a Guild.
 // DM Channel represent a one-to-one conversation between two users, outside of the
 // scope of guilds.
+// It's method names match the Discord API docs as closely as possible.
 type Channel struct {
 	ID                   string       `json:"id"`
 	GuildID              string       `json:"guild_id"`
