@@ -93,14 +93,17 @@ func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, er
 		// Do not increment n because the next request should always be tried.
 		return c.doN(req, rateLimitPath, n)
 	default:
-		err := &APIError{
+		apiErr := &APIError{
 			Request:  req,
 			Response: resp,
 			Body:     body,
 		}
+		body := []byte{}
 		// Ignore error because we may not have a error response at all.
-		_ = json.Unmarshal(body, &err.JSON)
-		return nil, err
+		// And APIError.Error() will print the response body so if there is an
+		// error in the JSON, it will be known.
+		_ = json.Unmarshal(body, &apiErr.JSON)
+		return nil, apiErr
 	}
 	return body, nil
 }
@@ -128,7 +131,7 @@ type APIError struct {
 func (err *APIError) Error() string {
 	if err.JSON == nil {
 		code := err.Response.StatusCode
-		return fmt.Sprintf("Unexpected response %v %v", code, http.StatusText(code))
+		return fmt.Sprintf("Unexpected response %v %v, body: %q", code, http.StatusText(code), err.Body)
 	}
 	return fmt.Sprintf("Error code: %v, message: %v", err.JSON.Code, err.JSON.Message)
 }

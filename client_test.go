@@ -25,6 +25,9 @@ func TestClient_APIError(t *testing.T) {
 	if !ok {
 		t.Fatal("expected error to be of type *discgo.APIError")
 	}
+	if apiErr.JSON == nil {
+		t.Fatal("expected non nil apiErr.JSON")
+	}
 	if apiErr.Response.StatusCode != http.StatusUnauthorized {
 		t.Fatal("expected %v but got %v", http.StatusUnauthorized, apiErr.Response.StatusCode)
 	}
