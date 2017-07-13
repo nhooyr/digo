@@ -29,12 +29,12 @@ func TestClient_APIError(t *testing.T) {
 		t.Fatal("expected non nil apiErr.JSON")
 	}
 	if apiErr.Response.StatusCode != http.StatusUnauthorized {
-		t.Fatal("expected %v but got %v", http.StatusUnauthorized, apiErr.Response.StatusCode)
+		t.Fatalf("expected %v but got %v", http.StatusUnauthorized, apiErr.Response.StatusCode)
 	}
 	if apiErr.JSON.Code != 0 {
-		t.Fatal("expected %v but got %v", 0, apiErr.JSON.Code)
+		t.Fatalf("expected %v but got %v", 0, apiErr.JSON.Code)
 	}
 	if apiErr.JSON.Message != "401: Unauthorized" {
-		t.Fatal("expected %v but got %v", 0, apiErr.JSON.Message)
+		t.Fatalf("expected %v but got %v", 0, apiErr.JSON.Message)
 	}
 }

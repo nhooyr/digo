@@ -124,7 +124,7 @@ type ParamsModifyGuild struct {
 	VerificationLevel           int    `json:"verification_level,omitempty"`
 	DefaultMessageNotifications int    `json:"default_message_notifications,omitempty"`
 	AFKChannelID                string `json:"afk_channel_id,omitempty"`
-	AFKTiemout                  int    `json:"afk_tiemout,omitempty"`
+	AFKTimeout                  int    `json:"afk_tiemout,omitempty"`
 	Icon                        string `json:"icon,omitempty"`
 	OwnerID                     string `json:"owner_id,omitempty"`
 	Splash                      string `json:"splash,omitempty"`
@@ -155,7 +155,7 @@ func (c *Client) CreateChannel(gID string, params *ParamsCreateChannel) (ch *Cha
 }
 
 // TODO perhaps just use a channel struct?
-// TODO gotta look at makign other names more clear/verbose
+// TODO gotta look at making other names more clear/verbose
 type ParamsModifyChannelPositions struct {
 	ID       string `json:"id"`
 	Position int    `json:"position"`

@@ -153,10 +153,20 @@ type Attachment struct {
 // TODO create mention method on User, Channel, Role and Custom ReactionEmoji structs
 // https://discordapp.com/developers/docs/resources/channel#message-formatting
 
-func (c *Client) GetChannel(cID string) (ch *Channel, err error) {
+type ChannelEndpoint struct {
+	c             *Client
+	endpoint      string
+	rateLimitPath string
+}
+
+func (c *Client) Channel(cID string) *ChannelEndpoint {
 	endpoint := path.Join("channels", cID)
-	req := c.newRequest("GET", endpoint, nil)
-	return ch, c.doUnmarshal(req, endpoint, &ch)
+	return &ChannelEndpoint{c, endpoint, endpoint}
+}
+
+func (e *ChannelEndpoint) Get() (ch *Channel, err error) {
+	req := e.c.newRequest("GET", e.endpoint, nil)
+	return ch, e.c.doUnmarshal(req, e.rateLimitPath, &ch)
 }
 
 type ParamsModifyChannel struct {
@@ -167,16 +177,14 @@ type ParamsModifyChannel struct {
 	UserLimit int    `json:"user_limit,omitempty"`
 }
 
-func (c *Client) ModifyChannel(cID string, params *ParamsModifyChannel) (ch *Channel, err error) {
-	endpoint := path.Join("channels", cID)
-	req := c.newRequestJSON("PATCH", endpoint, params)
-	return ch, c.doUnmarshal(req, endpoint, &ch)
+func (e *ChannelEndpoint) Modify(params *ParamsModifyChannel) (ch *Channel, err error) {
+	req := e.c.newRequestJSON("PATCH", e.endpoint, params)
+	return ch, e.c.doUnmarshal(req, e.rateLimitPath, &ch)
 }
 
-func (c *Client) DeleteChannel(cID string) (ch *Channel, err error) {
-	endpoint := path.Join("channels", cID)
-	req := c.newRequest("DELETE", endpoint, nil)
-	return ch, c.doUnmarshal(req, endpoint, &ch)
+func (e *ChannelEndpoint) Delete() (ch *Channel, err error) {
+	req := e.c.newRequest("DELETE", e.endpoint, nil)
+	return ch, e.c.doUnmarshal(req, e.rateLimitPath, &ch)
 }
 
 type ParamsGetMessages struct {
@@ -372,10 +380,10 @@ func (c *Client) TriggerTypingIndicator(cID string) error {
 	return c.do(req, endpoint)
 }
 
-func (c *Client) GetPinnedMessages(cID string) (msgs []*Message, err error) {
+func (c *Client) GetPinnedMessages(cID string) (messages []*Message, err error) {
 	endpoint := path.Join("channels", cID, "pins")
 	req := c.newRequest("GET", endpoint, nil)
-	return msgs, c.doUnmarshal(req, endpoint, &msgs)
+	return messages, c.doUnmarshal(req, endpoint, &messages)
 }
 
 func (c *Client) PinMessage(cID, mID string) error {

@@ -13,14 +13,14 @@ var (
 )
 
 func TestClient_GetChannelMessages(t *testing.T) {
-	pgcms := &discgo.ParamsGetMessages{
+	params := &discgo.ParamsGetMessages{
 		Limit: 5,
 	}
-	msgs, err := c.GetMessages(cID, pgcms)
+	messages, err := c.GetMessages(cID, params)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(msgs[0].Content)
+	t.Log(messages[0].Content)
 }
 
 func TestClient_CreateMessage(t *testing.T) {

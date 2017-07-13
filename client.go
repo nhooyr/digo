@@ -9,7 +9,6 @@ import (
 
 	"bytes"
 
-	// TODO gotta use this package everywhere
 	"time"
 )
 
