@@ -153,23 +153,27 @@ type Attachment struct {
 // TODO create mention method on User, Channel, Role and Custom ReactionEmoji structs
 // https://discordapp.com/developers/docs/resources/channel#message-formatting
 
-type ChannelEndpoint struct {
-	c             *Client
-	endpoint      string
-	rateLimitPath string
+type ChannelsEndpoint struct {
+	*endpoint
 }
 
-func (c *Client) Channel(cID string) *ChannelEndpoint {
-	endpoint := path.Join("channels", cID)
-	return &ChannelEndpoint{c, endpoint, endpoint}
+func (c *Client) Channels() *ChannelEndpoint {
+	return &ChannelsEndpoint{c.e.copy("channels", "channels")}
+}
+
+func (e *ChannelsEndpoint) ID(cID string) *ChannelEndpoint {
+	return &ChannelEndpoint{e.copy(cID, cID)}
+}
+
+type ChannelEndpoint struct {
+	*endpoint
 }
 
 func (e *ChannelEndpoint) Get() (ch *Channel, err error) {
-	req := e.c.newRequest("GET", e.endpoint, nil)
-	return ch, e.c.doUnmarshal(req, e.rateLimitPath, &ch)
+	return ch, e.doMethod("GET", nil, &ch)
 }
 
-type ParamsModifyChannel struct {
+type ChannelModifyParams struct {
 	Name      string `json:"name,omitempty"`
 	Position  int    `json:"position,omitempty"`
 	Topic     string `json:"topic,omitempty"`
@@ -177,34 +181,30 @@ type ParamsModifyChannel struct {
 	UserLimit int    `json:"user_limit,omitempty"`
 }
 
-func (e *ChannelEndpoint) Modify(params *ParamsModifyChannel) (ch *Channel, err error) {
-	req := e.c.newRequestJSON("PATCH", e.endpoint, params)
-	return ch, e.c.doUnmarshal(req, e.rateLimitPath, &ch)
+func (e *ChannelEndpoint) Modify(params *ChannelModifyParams) (ch *Channel, err error) {
+	return ch, e.doMethod("PATCH", params, &ch)
 }
 
 func (e *ChannelEndpoint) Delete() (ch *Channel, err error) {
-	req := e.c.newRequest("DELETE", e.endpoint, nil)
-	return ch, e.c.doUnmarshal(req, e.rateLimitPath, &ch)
+	return ch, e.doMethod("PATCH", nil, &ch)
 }
 
 type MessagesEndpoint struct {
-	c             *Client
-	endpoint      string
-	rateLimitPath string
+	*endpoint
 }
 
-func (e *ChannelEndpoint) Messages() {
-
+func (e *ChannelEndpoint) Messages() *MessagesEndpoint {
+	return &MessagesEndpoint{e.copy("messages", "messages")}
 }
 
-type ParamsGetMessages struct {
+type MessagesGetParams struct {
 	AroundID string
 	BeforeID string
 	AfterID  string
 	Limit    int
 }
 
-func (params *ParamsGetMessages) rawQuery() string {
+func (params *MessagesGetParams) rawQuery() string {
 	v := make(url.Values)
 	if params.AroundID != "" {
 		v.Set("around", params.AroundID)
@@ -221,23 +221,27 @@ func (params *ParamsGetMessages) rawQuery() string {
 	return v.Encode()
 }
 
-func (c *Client) GetMessages(cID string, params *ParamsGetMessages) (messages []*Message, err error) {
-	endpoint := path.Join("channels", cID, "messages")
-	req := c.newRequest("GET", endpoint, nil)
+func (e *MessagesEndpoint) Get(params *MessagesGetParams) (messages []*Message, err error) {
+	req := e.newRequest("GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
 	}
-	return messages, c.doUnmarshal(req, endpoint, &messages)
+	return messages, e.do(req, &messages)
 }
 
-func (c *Client) GetMessage(cID, mID string) (m *Message, err error) {
-	endpoint := path.Join("channels", cID, "messages", mID)
-	req := c.newRequest("GET", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "messages", "*")
-	return m, c.doUnmarshal(req, rateLimitPath, &m)
+type MessageEndpoint struct {
+	*endpoint
 }
 
-type ParamsCreateMessage struct {
+func (e *MessagesEndpoint) One(mID string) *MessageEndpoint {
+	return &MessageEndpoint{e.copy(mID, mID)}
+}
+
+func (e *MessageEndpoint) Get() (m *Message, err error) {
+	return m, e.doMethod("GET", nil, &m)
+}
+
+type MessagesCreateParams struct {
 	Content string `json:"content,omitempty"`
 	Nonce   string `json:"nonce,omitempty"`
 	TTS     bool   `json:"tts,omitempty"`
@@ -250,7 +254,7 @@ type File struct {
 	Content io.Reader
 }
 
-func (c *Client) CreateMessage(cID string, params *ParamsCreateMessage) (m *Message, err error) {
+func (e *MessagesEndpoint) Create(params *MessagesCreateParams) (m *Message, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
@@ -284,11 +288,9 @@ func (c *Client) CreateMessage(cID string, params *ParamsCreateMessage) (m *Mess
 		return nil, err
 	}
 
-	endpoint := path.Join("channels", cID, "messages")
-	req := c.newRequest("POST", endpoint, reqBody)
+	req := e.newRequest("POST", reqBody)
 	req.Header.Set("Content-Type", reqBodyWriter.FormDataContentType())
-
-	return m, c.doUnmarshal(req, endpoint, &m)
+	return m, e.do(req, &m)
 }
 
 func (c *Client) CreateReaction(cID, mID, emoji string) error {

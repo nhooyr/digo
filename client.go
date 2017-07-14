@@ -9,6 +9,7 @@ import (
 
 	"bytes"
 
+	"path"
 	"time"
 )
 
@@ -22,20 +23,26 @@ type Client struct {
 	HttpClient *http.Client
 
 	rl *rateLimiter
-}
-
-func NewClient() *Client {
-	return &Client{
-		UserAgent:  defaultUserAgent,
-		HttpClient: &http.Client{Timeout: 20 * time.Second},
-		rl:         newRateLimiter(),
-	}
+	e  *endpoint
 }
 
 const endpointAPI = "https://discordapp.com/api/"
 
-func (c *Client) newRequest(method, endpoint string, body io.Reader) *http.Request {
-	req, err := http.NewRequest(method, endpointAPI+endpoint, body)
+func NewClient() *Client {
+	c := &Client{
+		UserAgent:  defaultUserAgent,
+		HttpClient: &http.Client{Timeout: 20 * time.Second},
+		rl:         newRateLimiter(),
+	}
+	c.e = &endpoint{
+		c:   c,
+		url: endpointAPI,
+	}
+	return c
+}
+
+func (c *Client) newRequest(method, url string, body io.Reader) *http.Request {
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		panic(err)
 	}
@@ -54,17 +61,8 @@ func (c *Client) newRequestJSON(method, endpoint string, v interface{}) *http.Re
 	return req
 }
 
-func (c *Client) do(req *http.Request, rateLimitPath string) error {
-	_, err := c.doN(req, rateLimitPath, 0)
-	return err
-}
-
-func (c *Client) doUnmarshal(req *http.Request, rateLimitPath string, v interface{}) error {
-	body, err := c.doN(req, rateLimitPath, 0)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(body, &v)
+func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
+	return c.doN(req, rateLimitPath, 0)
 }
 
 func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
@@ -133,4 +131,44 @@ func (err *APIError) Error() string {
 		return fmt.Sprintf("Unexpected response %v %v, body: %q", code, http.StatusText(code), err.Body)
 	}
 	return fmt.Sprintf("Error code: %v, message: %v", err.JSON.Code, err.JSON.Message)
+}
+
+type endpoint struct {
+	c             *Client
+	url           string
+	rateLimitPath string
+}
+
+func (e *endpoint) copy(pathEl, rateLimitPathEl string) *endpoint {
+	e2 := &endpoint{e.c, e.url, e.rateLimitPath}
+	e2.url = path.Join(e.url, pathEl)
+	e2.rateLimitPath = path.Join(e.rateLimitPath, rateLimitPathEl)
+	return 2
+}
+
+func (e *endpoint) newRequest(method string, reqBody io.Reader) *http.Request {
+	return e.c.newRequest(method, e.url, reqBody)
+}
+
+func (e *endpoint) do(req *http.Request, v interface{}) error {
+	respBody, err := e.c.do(req, e.rateLimitPath)
+	if err != nil || v == nil {
+		return err
+	}
+	return json.Unmarshal(respBody, v)
+}
+
+// Be careful with this method, it panics if json.Marshal errors.
+func (e *endpoint) doMethod(method string, v1 interface{}, v2 interface{}) error {
+	var req *http.Request
+	if v1 != nil {
+		reqBody, err := json.Marshal(v1)
+		if err != nil {
+			panic(err)
+		}
+		req = e.newRequest(method, bytes.NewBuffer(reqBody))
+	} else {
+		req = e.newRequest(method, nil)
+	}
+	return e.do(req, v2)
 }
