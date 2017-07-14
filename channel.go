@@ -229,18 +229,6 @@ func (e *MessagesEndpoint) Get(params *MessagesGetParams) (messages []*Message, 
 	return messages, e.do(req, &messages)
 }
 
-type MessageEndpoint struct {
-	*endpoint
-}
-
-func (e *MessagesEndpoint) One(mID string) *MessageEndpoint {
-	return &MessageEndpoint{e.copy(mID, mID)}
-}
-
-func (e *MessageEndpoint) Get() (m *Message, err error) {
-	return m, e.doMethod("GET", nil, &m)
-}
-
 type MessagesCreateParams struct {
 	Content string `json:"content,omitempty"`
 	Nonce   string `json:"nonce,omitempty"`
@@ -291,6 +279,26 @@ func (e *MessagesEndpoint) Create(params *MessagesCreateParams) (m *Message, err
 	req := e.newRequest("POST", reqBody)
 	req.Header.Set("Content-Type", reqBodyWriter.FormDataContentType())
 	return m, e.do(req, &m)
+}
+
+type MessageEndpoint struct {
+	*endpoint
+}
+
+func (e *MessagesEndpoint) One(mID string) *MessageEndpoint {
+	return &MessageEndpoint{e.copy(mID, mID)}
+}
+
+func (e *MessageEndpoint) Get() (m *Message, err error) {
+	return m, e.doMethod("GET", nil, &m)
+}
+
+type ReactionsEndpoint struct {
+	*endpoint
+}
+
+func (e *MessageEndpoint) Reactions() *ReactionsEndpoint {
+
 }
 
 func (c *Client) CreateReaction(cID, mID, emoji string) error {

@@ -140,6 +140,7 @@ func (e *endpoint) newRequest(method string, reqBody io.Reader) *http.Request {
 	return e.c.newRequest(method, e.url, reqBody)
 }
 
+// Be careful with this method, it panics if json.Marshal errors.
 func (e *endpoint) newRequestJSON(method string, v interface{}) *http.Request {
 	body, err := json.Marshal(v)
 	if err != nil {
@@ -158,7 +159,6 @@ func (e *endpoint) do(req *http.Request, v interface{}) error {
 	return json.Unmarshal(respBody, v)
 }
 
-// Be careful with this method, it panics if json.Marshal errors.
 func (e *endpoint) doMethod(method string, v1 interface{}, v2 interface{}) error {
 	var req *http.Request
 	if v1 == nil {
