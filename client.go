@@ -129,11 +129,19 @@ type endpoint struct {
 	rateLimitPath string
 }
 
-func (e *endpoint) copy(pathEl, rateLimitPathEl string) *endpoint {
+func (e *endpoint) append(urlElement, rateLimitPathElement string) *endpoint {
 	e2 := &endpoint{e.c, e.url, e.rateLimitPath}
-	e2.url = path.Join(e.url, pathEl)
-	e2.rateLimitPath = path.Join(e.rateLimitPath, rateLimitPathEl)
+	e2.url = path.Join(e.url, urlElement)
+	e2.rateLimitPath = path.Join(e.rateLimitPath, rateLimitPathElement)
 	return e2
+}
+
+func (e *endpoint) appendMajor(element string) *endpoint {
+	return e.append(element, element)
+}
+
+func (e *endpoint) appendMinor(element string) *endpoint {
+	return e.append(element, "*")
 }
 
 func (e *endpoint) newRequest(method string, reqBody io.Reader) *http.Request {

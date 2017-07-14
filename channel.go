@@ -158,15 +158,15 @@ type ChannelsEndpoint struct {
 }
 
 func (c *Client) Channels() *ChannelEndpoint {
-	return &ChannelsEndpoint{c.e.copy("channels", "channels")}
-}
-
-func (e *ChannelsEndpoint) ID(cID string) *ChannelEndpoint {
-	return &ChannelEndpoint{e.copy(cID, cID)}
+	return &ChannelsEndpoint{c.e.appendMajor("channels")}
 }
 
 type ChannelEndpoint struct {
 	*endpoint
+}
+
+func (e *ChannelsEndpoint) ID(cID string) *ChannelEndpoint {
+	return &ChannelEndpoint{e.appendMajor(cID)}
 }
 
 func (e *ChannelEndpoint) Get() (ch *Channel, err error) {
@@ -194,7 +194,7 @@ type MessagesEndpoint struct {
 }
 
 func (e *ChannelEndpoint) Messages() *MessagesEndpoint {
-	return &MessagesEndpoint{e.copy("messages", "messages")}
+	return &MessagesEndpoint{e.appendMajor("messages")}
 }
 
 type MessagesGetParams struct {
@@ -285,49 +285,12 @@ type MessageEndpoint struct {
 	*endpoint
 }
 
-func (e *MessagesEndpoint) One(mID string) *MessageEndpoint {
-	return &MessageEndpoint{e.copy(mID, mID)}
+func (e *MessagesEndpoint) ID(mID string) *MessageEndpoint {
+	return &MessageEndpoint{e.appendMinor(mID)}
 }
 
 func (e *MessageEndpoint) Get() (m *Message, err error) {
 	return m, e.doMethod("GET", nil, &m)
-}
-
-type ReactionsEndpoint struct {
-	*endpoint
-}
-
-func (e *MessageEndpoint) Reactions() *ReactionsEndpoint {
-
-}
-
-func (c *Client) CreateReaction(cID, mID, emoji string) error {
-	endpoint := path.Join("channels", cID, "messages", mID, "reactions", emoji, "@me")
-	req := c.newRequest("PUT", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions", "*", "*")
-	return c.do(req, rateLimitPath)
-}
-
-// uID = "@me" for your own reaction
-func (c *Client) DeleteReaction(cID, mID, emoji, uID string) error {
-	endpoint := path.Join("channels", cID, "messages", mID, "reactions", emoji, uID)
-	req := c.newRequest("DELETE", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions", "*", "*")
-	return c.do(req, rateLimitPath)
-}
-
-func (c *Client) GetReactions(cID, mID, emoji string) (users []*User, err error) {
-	endpoint := path.Join("channels", cID, "messages", mID, "reactions", emoji)
-	req := c.newRequest("GET", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions", "*")
-	return users, c.doUnmarshal(req, rateLimitPath, &users)
-}
-
-func (c *Client) DeleteReactions(cID, mID string) error {
-	endpoint := path.Join("channels", cID, "messages", mID, "reactions")
-	req := c.newRequest("DELETE", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "messages", "*", "reactions")
-	return c.do(req, rateLimitPath)
 }
 
 type ParamsEditMessage struct {
@@ -335,24 +298,64 @@ type ParamsEditMessage struct {
 	Embed   *Embed `json:"embed,omitempty"`
 }
 
-func (c *Client) EditMessage(cID, mID string, params *ParamsEditMessage) (m *Message, err error) {
-	endpoint := path.Join("channels", cID, "messages", mID)
-	req := c.newRequestJSON("PATCH", endpoint, params)
-	rateLimitPath := path.Join("channels", cID, "messages", "*")
-	return m, c.doUnmarshal(req, rateLimitPath, &m)
+func (e *MessageEndpoint) Edit(params *ParamsEditMessage) (m *Message, err error) {
+	return m, e.doMethod("PATCH", params, &m)
 }
 
-func (c *Client) DeleteMessage(cID, mID string) error {
-	endpoint := path.Join("channels", cID, "messages", mID)
-	req := c.newRequest("DELETE", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "messages", "*")
-	return c.do(req, rateLimitPath)
+func (e *MessageEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
 }
 
-func (c *Client) BulkDeleteMessages(cID string, mIDs []string) error {
-	endpoint := path.Join("channels", cID, "messages", "bulk-delete")
-	req := c.newRequestJSON("POST", endpoint, mIDs)
-	return c.do(req, endpoint)
+type ReactionsEndpoint struct {
+	*endpoint
+}
+
+func (e *MessageEndpoint) Reactions() *ReactionsEndpoint {
+	return &ReactionsEndpoint{e.appendMajor("reactions")}
+}
+
+func (e *ReactionsEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
+}
+
+type EmojiEndpoint struct {
+	*endpoint
+}
+
+func (e *ReactionsEndpoint) Emoji(emoji string) *EmojiEndpoint {
+	return &EmojiEndpoint{e.appendMinor(emoji)}
+}
+
+func (e *EmojiEndpoint) GetReactions() (users []*User, err error) {
+	return users, e.doMethod("GET", nil, &users)
+}
+
+type ReactionEndpoint struct {
+	*endpoint
+}
+
+func (e *EmojiEndpoint) Reaction(uID string) *ReactionEndpoint {
+	return &ReactionEndpoint{e.appendMinor(uID)}
+}
+
+func (e *ReactionEndpoint) Create() error {
+	return e.doMethod("PUT", nil, nil)
+}
+
+func (e *ReactionEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
+}
+
+type BulkDeleteEndpoint struct {
+	*endpoint
+}
+
+func (e *MessagesEndpoint) BulkDelete() *BulkDeleteEndpoint {
+	return &BulkDeleteEndpoint{e.appendMajor("bulk-delete")}
+}
+
+func (e *BulkDeleteEndpoint) Post(messageIDs []string) error {
+	return e.doMethod("POST", messageIDs, nil)
 }
 
 type ParamsEditPermissions struct {
