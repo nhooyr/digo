@@ -20,7 +20,7 @@ import (
 // Guild Channel represents an isolated set of users and messages within a Guild.
 // DM Channel represent a one-to-one conversation between two users, outside of the
 // scope of guilds.
-// It's method names match the Discord API docs as closely as possible.
+// TODO I really don't like this merger, surely there must be a better way? perhaps an interface?
 type Channel struct {
 	ID                   string       `json:"id"`
 	GuildID              string       `json:"guild_id"`
@@ -358,81 +358,120 @@ func (e *BulkDeleteEndpoint) Post(messageIDs []string) error {
 	return e.doMethod("POST", messageIDs, nil)
 }
 
-type ParamsEditPermissions struct {
+type PermissionsEndpoint struct {
+	*endpoint
+}
+
+func (e *MessagesEndpoint) Permissions() *PermissionsEndpoint {
+	return &PermissionsEndpoint{e.appendMajor("permissions")}
+}
+
+type OverwriteEndpoint struct {
+	*endpoint
+}
+
+func (e *PermissionsEndpoint) Overwrite(overwriteID string) *OverwriteEndpoint {
+	return &OverwriteEndpoint{e.appendMinor("overwriteID")}
+}
+
+type PermissionsEditEndpoint struct {
 	Allow int    `json:"allow"`
 	Deny  int    `json:"deny"`
 	Type  string `json:"type"`
 }
 
-func (c *Client) EditPermissions(cID, overwriteID string, params *ParamsEditPermissions) error {
-	endpoint := path.Join("channels", cID, "permissions", overwriteID)
-	req := c.newRequestJSON("PUT", endpoint, params)
-	rateLimitPath := path.Join("channels", cID, "permissions", "*")
-	return c.do(req, rateLimitPath)
+func (e *OverwriteEndpoint) Edit(params *PermissionsEditEndpoint) error {
+	return e.doMethod("PUT", params, nil)
 }
 
-func (c *Client) GetInvites(cID string) (invites []*Invite, err error) {
-	endpoint := path.Join("channels", cID, "invites")
-	req := c.newRequest("GET", endpoint, nil)
-	return invites, c.doUnmarshal(req, endpoint, &invites)
+func (e *OverwriteEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
 }
 
-type ParamsCreateInvite struct {
+type InvitesEndpoint struct {
+	*endpoint
+}
+
+func (e *ChannelEndpoint) Invites() *InvitesEndpoint {
+	return &InvitesEndpoint{e.appendMajor("invites")}
+}
+
+func (e *InvitesEndpoint) Get() (invites []*Invite, err error) {
+	return invites, e.doMethod("GET", nil, &invites)
+}
+
+type InviteCreateParams struct {
 	MaxAge    int  `json:"max_age,omitempty"`
 	MaxUses   int  `json:"max_uses,omitempty"`
 	Temporary bool `json:"temporary,omitempty"`
 	Unique    bool `json:"unique,omitempty"`
 }
 
-func (c *Client) CreateInvite(cID string, params *ParamsCreateInvite) (invite *Invite, err error) {
-	endpoint := path.Join("channels", cID, "invites")
-	req := c.newRequestJSON("POST", cID, params)
-	return invite, c.doUnmarshal(req, endpoint, &invite)
+func (e *InvitesEndpoint) Create(params *InviteCreateParams) (invite *Invite, err error) {
+	return invite, e.doMethod("GET", params, &invite)
 }
 
-func (c *Client) DeletePermission(cID, overwriteID string) error {
-	endpoint := path.Join("channels", cID, "overwrites", overwriteID)
-	req := c.newRequest("DELETE", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "overwrites", "*")
-	return c.do(req, rateLimitPath)
+type TypingEndpoint struct {
+	*endpoint
 }
 
-func (c *Client) TriggerTypingIndicator(cID string) error {
-	endpoint := path.Join("channels", cID, "typing")
-	req := c.newRequest("POST", endpoint, nil)
-	return c.do(req, endpoint)
+func (e *ChannelEndpoint) Typing() *TypingEndpoint {
+	return &TypingEndpoint{e.appendMajor("typing")}
 }
 
-func (c *Client) GetPinnedMessages(cID string) (messages []*Message, err error) {
-	endpoint := path.Join("channels", cID, "pins")
-	req := c.newRequest("GET", endpoint, nil)
-	return messages, c.doUnmarshal(req, endpoint, &messages)
+// TODO should method names like this that do not include the HTTP method be allowed?
+func (e *TypingEndpoint) Trigger() error {
+	return e.doMethod("POST", nil, nil)
 }
 
-func (c *Client) PinMessage(cID, mID string) error {
-	endpoint := path.Join("channels", cID, "pins", mID)
-	req := c.newRequest("PUT", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "pins", "*")
-	return c.do(req, rateLimitPath)
+type PinsEndpoint struct {
+	*endpoint
 }
 
-func (c *Client) DeletePinnedMessage(cID, mID string) error {
-	endpoint := path.Join("channels", cID, "pins", mID)
-	req := c.newRequest("DELETE", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "pins", "*")
-	return c.do(req, rateLimitPath)
+func (e *ChannelEndpoint) Pins() *PinsEndpoint {
+	return &PinsEndpoint{e.appendMajor("pins")}
 }
 
-func (c *Client) AddDMRecipient(cID, uID string) error {
-	endpoint := path.Join("channels", cID, "recipients", uID)
-	req := c.newRequest("PUT", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "recipients", "*")
-	return c.do(req, rateLimitPath)
+func (e *PinsEndpoint) Get() (messages []*Message, err error) {
+	return messages, e.doMethod("GET", nil, &messages)
 }
 
-func (c *Client) RemoveDMRecipient(cID, uID string) error {
-	endpoint := path.Join("channels", cID, "recipients", uID)
-	req := c.newRequest("DELETE", endpoint, nil)
-	rateLimitPath := path.Join("channels", cID, "recipients", "*")
-	return c.do(req, rateLimitPath)
+type PinnedMessageEndpoint struct {
+	*endpoint
+}
+
+func (e *PinsEndpoint) ID(mID string) *PinnedMessageEndpoint {
+	return &PinnedMessageEndpoint{e.appendMinor(mID)}
+}
+
+func (e *PinnedMessageEndpoint) Pin() error {
+	return e.doMethod("PUT", nil, nil)
+}
+
+func (e *PinnedMessageEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
+}
+
+type RecipientsEndpoint struct {
+	*endpoint
+}
+
+func (e *ChannelEndpoint) Recipients() *RecipientsEndpoint {
+	return &RecipientsEndpoint{e.appendMajor("recipients")}
+}
+
+type RecipientEndpoint struct {
+	*endpoint
+}
+
+func (e *RecipientsEndpoint) ID(uID string) *RecipientEndpoint {
+	return &RecipientEndpoint{e.appendMajor(uID)}
+}
+
+func (e *RecipientEndpoint) Add() error {
+	return e.doMethod("PUT", nil, nil)
+}
+
+func (e *RecipientEndpoint) Remove() error {
+	return e.doMethod("DELETE", nil, nil)
 }
