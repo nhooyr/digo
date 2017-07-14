@@ -133,7 +133,7 @@ func (e *endpoint) copy(pathEl, rateLimitPathEl string) *endpoint {
 	e2 := &endpoint{e.c, e.url, e.rateLimitPath}
 	e2.url = path.Join(e.url, pathEl)
 	e2.rateLimitPath = path.Join(e.rateLimitPath, rateLimitPathEl)
-	return 2
+	return e2
 }
 
 func (e *endpoint) newRequest(method string, reqBody io.Reader) *http.Request {
