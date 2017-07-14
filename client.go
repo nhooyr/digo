@@ -51,16 +51,6 @@ func (c *Client) newRequest(method, url string, body io.Reader) *http.Request {
 	return req
 }
 
-func (c *Client) newRequestJSON(method, endpoint string, v interface{}) *http.Request {
-	body, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	req := c.newRequest(method, endpoint, bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	return req
-}
-
 func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
 	return c.doN(req, rateLimitPath, 0)
 }
@@ -150,6 +140,16 @@ func (e *endpoint) newRequest(method string, reqBody io.Reader) *http.Request {
 	return e.c.newRequest(method, e.url, reqBody)
 }
 
+func (e *endpoint) newRequestJSON(method string, v interface{}) *http.Request {
+	body, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	req := e.c.newRequest(method, e.url, bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
 func (e *endpoint) do(req *http.Request, v interface{}) error {
 	respBody, err := e.c.do(req, e.rateLimitPath)
 	if err != nil || v == nil {
@@ -161,14 +161,10 @@ func (e *endpoint) do(req *http.Request, v interface{}) error {
 // Be careful with this method, it panics if json.Marshal errors.
 func (e *endpoint) doMethod(method string, v1 interface{}, v2 interface{}) error {
 	var req *http.Request
-	if v1 != nil {
-		reqBody, err := json.Marshal(v1)
-		if err != nil {
-			panic(err)
-		}
-		req = e.newRequest(method, bytes.NewBuffer(reqBody))
-	} else {
+	if v1 == nil {
 		req = e.newRequest(method, nil)
+	} else {
+		req = e.newRequestJSON(method, v1)
 	}
 	return e.do(req, v2)
 }
