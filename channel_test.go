@@ -16,7 +16,7 @@ func TestClient_GetChannelMessages(t *testing.T) {
 	params := &discgo.MessagesGetParams{
 		Limit: 5,
 	}
-	messages, err := c.Channel(cID).Messages().Get(params)
+	messages, err := c.Channels().One(cID).Messages().Get(params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestClient_CreateMessage(t *testing.T) {
 	}
 	defer f.Close()
 
-	cm := &discgo.MessagesCreateParams{
+	params := &discgo.MessagesCreateParams{
 		Content: "boar",
 		File: &discgo.File{
 			Name:    "screenshot.png",
@@ -43,7 +43,7 @@ func TestClient_CreateMessage(t *testing.T) {
 			},
 		},
 	}
-	msg, err := c.CreateMessage(cID, cm)
+	msg, err := c.Channels().One(cID).Messages().Post(params)
 	if err != nil {
 		t.Fatal(err)
 	}

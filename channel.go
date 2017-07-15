@@ -18,7 +18,7 @@ import (
 // Guild Channel represents an isolated set of users and messages within a Guild.
 // DM Channel represent a one-to-one conversation between two users, outside of the
 // scope of guilds.
-// TODO I really don't like this merger, surely there must be a better way? perhaps an interface?
+// TODO I really don't like this merger, surely there must be a better way? perhaps an interface? it would make the endpoint API a lot more unclean though. gotta think
 type Channel struct {
 	ID                   string       `json:"id"`
 	GuildID              string       `json:"guild_id"`
@@ -151,12 +151,22 @@ type Attachment struct {
 // TODO create mention method on User, Channel, Role and Custom ReactionEmoji structs
 // https://discordapp.com/developers/docs/resources/channel#message-formatting
 
+type ChannelsEndpoint struct {
+	*endpoint
+}
+
+func (c *Client) Channels() *ChannelsEndpoint {
+	e2 := c.e.appendMajor("channels")
+	return &ChannelsEndpoint{e2}
+}
+
 type ChannelEndpoint struct {
 	*endpoint
 }
 
-func (c *Client) Channel(cID string) *ChannelEndpoint {
-	return &ChannelEndpoint{c.e.appendMajor("channels").appendMajor(cID)}
+func (e *ChannelsEndpoint) One(cID string) *ChannelEndpoint {
+	e2 := e.appendMajor(cID)
+	return &ChannelEndpoint{e2}
 }
 
 func (e *ChannelEndpoint) Get() (ch *Channel, err error) {
@@ -171,7 +181,7 @@ type ChannelModifyParams struct {
 	UserLimit int    `json:"user_limit,omitempty"`
 }
 
-func (e *ChannelEndpoint) Modify(params *ChannelModifyParams) (ch *Channel, err error) {
+func (e *ChannelEndpoint) Patch(params *ChannelModifyParams) (ch *Channel, err error) {
 	return ch, e.doMethod("PATCH", params, &ch)
 }
 
@@ -232,7 +242,7 @@ type File struct {
 	Content io.Reader
 }
 
-func (e *MessagesEndpoint) Create(params *MessagesCreateParams) (m *Message, err error) {
+func (e *MessagesEndpoint) Post(params *MessagesCreateParams) (m *Message, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
@@ -275,8 +285,8 @@ type MessageEndpoint struct {
 	*endpoint
 }
 
-func (e *ChannelEndpoint) Message(mID string) *MessageEndpoint {
-	return &MessageEndpoint{e.Messages().appendMinor(mID)}
+func (e *MessagesEndpoint) One(mID string) *MessageEndpoint {
+	return &MessageEndpoint{e.appendMinor(mID)}
 }
 
 func (e *MessageEndpoint) Get() (m *Message, err error) {
@@ -288,7 +298,7 @@ type MessageEditParams struct {
 	Embed   *Embed `json:"embed,omitempty"`
 }
 
-func (e *MessageEndpoint) Edit(params *MessageEditParams) (m *Message, err error) {
+func (e *MessageEndpoint) Patch(params *MessageEditParams) (m *Message, err error) {
 	return m, e.doMethod("PATCH", params, &m)
 }
 
@@ -304,39 +314,29 @@ func (e *MessageEndpoint) Reactions() *ReactionsEndpoint {
 	return &ReactionsEndpoint{e.appendMajor("reactions")}
 }
 
-func (e *ReactionsEndpoint) Get(emoji string) (users []*User, err error) {
-	e2 := e.appendMinor(emoji)
-	return users, e2.doMethod("GET", nil, &users)
-}
-
 func (e *ReactionsEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-type MyReactionEndpoint struct {
+type EmojiEndpoint struct {
 	*endpoint
 }
 
-func (e *MessageEndpoint) MyReaction(emoji string) *MyReactionEndpoint {
-	// appendMinor("@me") because of Delete method that needs to be shared with other users.
-	e2 := e.Reactions().appendMinor(emoji).appendMinor("@me")
-	return &MyReactionEndpoint{e2}
+func (e *ReactionsEndpoint) Emoji(emoji string) *EmojiEndpoint {
+	e2 := e.appendMinor(emoji)
+	return &EmojiEndpoint{e2}
 }
 
-func (e *MyReactionEndpoint) Create() error {
-	return e.doMethod("PUT", nil, nil)
-}
-
-func (e *MyReactionEndpoint) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e *EmojiEndpoint) Get() (users []*User, err error) {
+	return users, e.doMethod("GET", nil, &users)
 }
 
 type ReactionEndpoint struct {
 	*endpoint
 }
 
-func (e *MessageEndpoint) Reaction(emoji, uID string) *ReactionEndpoint {
-	e2 := e.Reactions().appendMinor(emoji).appendMinor(uID)
+func (e *EmojiEndpoint) User(uID string) *ReactionEndpoint {
+	e2 := e.appendMinor(uID)
 	return &ReactionEndpoint{e2}
 }
 
@@ -344,38 +344,65 @@ func (e *ReactionEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-func (e *MessagesEndpoint) BulkDelete(messageIDs []string) error {
+type MyReactionEndpoint struct {
+	*endpoint
+}
+
+func (e *EmojiEndpoint) My() *MyReactionEndpoint {
+	e2 := e.appendMinor("@me")
+	return &MyReactionEndpoint{e2}
+}
+
+func (e *MyReactionEndpoint) Put() error {
+	return e.doMethod("PUT", nil, nil)
+}
+
+func (e *MyReactionEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
+}
+
+type BulkDeleteEndpoint struct {
+	*endpoint
+}
+
+func (e *MessagesEndpoint) BulkDelete(messageIDs []string) *BulkDeleteEndpoint {
 	e2 := e.appendMajor("bulk-delete")
-	return e2.doMethod("POST", messageIDs, nil)
+	return &BulkDeleteEndpoint{e2}
 }
 
-type PermissionsEndpoint struct {
+func (e *BulkDeleteEndpoint) Post(messageIDs []string) error {
+	return e.doMethod("POST", messageIDs, nil)
+}
+
+type PermissionOverwritesEndpoint struct {
 	*endpoint
 }
 
-func (e *MessagesEndpoint) Permissions() *PermissionsEndpoint {
-	return &PermissionsEndpoint{e.appendMajor("permissions")}
+func (e *ChannelEndpoint) PermissionOverwrites() *PermissionOverwritesEndpoint {
+	e2 := e.appendMajor("permissions")
+	return &PermissionOverwritesEndpoint{e2}
 }
 
-type OverwriteEndpoint struct {
+type PermissionOverwriteEndpoint struct {
 	*endpoint
 }
 
-func (e *PermissionsEndpoint) Overwrite(overwriteID string) *OverwriteEndpoint {
-	return &OverwriteEndpoint{e.appendMinor("overwriteID")}
+func (e *PermissionOverwritesEndpoint) One(overwriteID string) *PermissionOverwriteEndpoint {
+	e2 := e.appendMajor("permissions").appendMinor(overwriteID)
+	return &PermissionOverwriteEndpoint{e2}
 }
 
-type PermissionsEditEndpoint struct {
+type PermissionOverwriteEditParams struct {
 	Allow int    `json:"allow"`
 	Deny  int    `json:"deny"`
 	Type  string `json:"type"`
 }
 
-func (e *OverwriteEndpoint) Edit(params *PermissionsEditEndpoint) error {
+func (e *PermissionOverwriteEndpoint) Edit(params *PermissionOverwriteEditParams) error {
 	return e.doMethod("PUT", params, nil)
 }
 
-func (e *OverwriteEndpoint) Delete() error {
+func (e *PermissionOverwriteEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
@@ -384,7 +411,8 @@ type InvitesEndpoint struct {
 }
 
 func (e *ChannelEndpoint) Invites() *InvitesEndpoint {
-	return &InvitesEndpoint{e.appendMajor("invites")}
+	e2 := e.appendMajor("invites")
+	return &InvitesEndpoint{e2}
 }
 
 func (e *InvitesEndpoint) Get() (invites []*Invite, err error) {
@@ -402,16 +430,16 @@ func (e *InvitesEndpoint) Create(params *InviteCreateParams) (invite *Invite, er
 	return invite, e.doMethod("GET", params, &invite)
 }
 
-type TypingEndpoint struct {
+type TypingIndicatorEndpoint struct {
 	*endpoint
 }
 
-func (e *ChannelEndpoint) Typing() *TypingEndpoint {
-	return &TypingEndpoint{e.appendMajor("typing")}
+func (e *ChannelEndpoint) TypingIndicator() *TypingIndicatorEndpoint {
+	e2 := e.appendMajor("typing")
+	return &TypingIndicatorEndpoint{e2}
 }
 
-// TODO should method names like this that do not include the HTTP method be allowed?
-func (e *TypingEndpoint) Trigger() error {
+func (e *TypingIndicatorEndpoint) Post() error {
 	return e.doMethod("POST", nil, nil)
 }
 
@@ -420,26 +448,28 @@ type PinsEndpoint struct {
 }
 
 func (e *ChannelEndpoint) Pins() *PinsEndpoint {
-	return &PinsEndpoint{e.appendMajor("pins")}
+	e2 := e.appendMajor("pins")
+	return &PinsEndpoint{e2}
 }
 
 func (e *PinsEndpoint) Get() (messages []*Message, err error) {
 	return messages, e.doMethod("GET", nil, &messages)
 }
 
-type PinnedMessageEndpoint struct {
+type PinEndpoint struct {
 	*endpoint
 }
 
-func (e *PinsEndpoint) ID(mID string) *PinnedMessageEndpoint {
-	return &PinnedMessageEndpoint{e.appendMinor(mID)}
+func (e *PinsEndpoint) One(mID string) *PinEndpoint {
+	e2 := e.appendMinor(mID)
+	return &PinEndpoint{e2}
 }
 
-func (e *PinnedMessageEndpoint) Pin() error {
+func (e *PinEndpoint) Put() error {
 	return e.doMethod("PUT", nil, nil)
 }
 
-func (e *PinnedMessageEndpoint) Delete() error {
+func (e *PinEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
@@ -448,15 +478,17 @@ type RecipientsEndpoint struct {
 }
 
 func (e *ChannelEndpoint) Recipients() *RecipientsEndpoint {
-	return &RecipientsEndpoint{e.appendMajor("recipients")}
+	e2 := e.appendMajor("recipients")
+	return &RecipientsEndpoint{e2}
 }
 
 type RecipientEndpoint struct {
 	*endpoint
 }
 
-func (e *RecipientsEndpoint) ID(uID string) *RecipientEndpoint {
-	return &RecipientEndpoint{e.appendMajor(uID)}
+func (e *RecipientsEndpoint) One(uID string) *RecipientEndpoint {
+	e2 := e.appendMinor(uID)
+	return &RecipientEndpoint{e2}
 }
 
 func (e *RecipientEndpoint) Add() error {
