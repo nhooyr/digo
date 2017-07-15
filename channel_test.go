@@ -16,7 +16,7 @@ func TestClient_GetChannelMessages(t *testing.T) {
 	params := &discgo.MessagesGetParams{
 		Limit: 5,
 	}
-	messages, err := c.GetMessages(cID, params)
+	messages, err := c.Channel(cID).Messages().Get(params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestClient_DeleteReactions(t *testing.T) {
 }
 
 func TestClient_UpdateMessage(t *testing.T) {
-	params := &discgo.ParamsEditMessage{
+	params := &discgo.MessageEditParams{
 		Content: "updated wow",
 	}
 	m, err := c.EditMessage(cID, mID, params)

@@ -5,8 +5,6 @@ import (
 
 	"encoding/json"
 
-	"path"
-
 	"net/url"
 	"strconv"
 
@@ -153,20 +151,12 @@ type Attachment struct {
 // TODO create mention method on User, Channel, Role and Custom ReactionEmoji structs
 // https://discordapp.com/developers/docs/resources/channel#message-formatting
 
-type ChannelsEndpoint struct {
-	*endpoint
-}
-
-func (c *Client) Channels() *ChannelEndpoint {
-	return &ChannelsEndpoint{c.e.appendMajor("channels")}
-}
-
 type ChannelEndpoint struct {
 	*endpoint
 }
 
-func (e *ChannelsEndpoint) ID(cID string) *ChannelEndpoint {
-	return &ChannelEndpoint{e.appendMajor(cID)}
+func (c *Client) Channel(cID string) *ChannelEndpoint {
+	return &ChannelEndpoint{c.e.appendMajor("channels").appendMajor(cID)}
 }
 
 func (e *ChannelEndpoint) Get() (ch *Channel, err error) {
@@ -186,7 +176,7 @@ func (e *ChannelEndpoint) Modify(params *ChannelModifyParams) (ch *Channel, err 
 }
 
 func (e *ChannelEndpoint) Delete() (ch *Channel, err error) {
-	return ch, e.doMethod("PATCH", nil, &ch)
+	return ch, e.doMethod("DELETE", nil, &ch)
 }
 
 type MessagesEndpoint struct {
@@ -285,20 +275,20 @@ type MessageEndpoint struct {
 	*endpoint
 }
 
-func (e *MessagesEndpoint) ID(mID string) *MessageEndpoint {
-	return &MessageEndpoint{e.appendMinor(mID)}
+func (e *ChannelEndpoint) Message(mID string) *MessageEndpoint {
+	return &MessageEndpoint{e.Messages().appendMinor(mID)}
 }
 
 func (e *MessageEndpoint) Get() (m *Message, err error) {
 	return m, e.doMethod("GET", nil, &m)
 }
 
-type ParamsEditMessage struct {
+type MessageEditParams struct {
 	Content string `json:"content,omitempty"`
 	Embed   *Embed `json:"embed,omitempty"`
 }
 
-func (e *MessageEndpoint) Edit(params *ParamsEditMessage) (m *Message, err error) {
+func (e *MessageEndpoint) Edit(params *MessageEditParams) (m *Message, err error) {
 	return m, e.doMethod("PATCH", params, &m)
 }
 
@@ -314,48 +304,49 @@ func (e *MessageEndpoint) Reactions() *ReactionsEndpoint {
 	return &ReactionsEndpoint{e.appendMajor("reactions")}
 }
 
+func (e *ReactionsEndpoint) Get(emoji string) (users []*User, err error) {
+	e2 := e.appendMinor(emoji)
+	return users, e2.doMethod("GET", nil, &users)
+}
+
 func (e *ReactionsEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-type EmojiEndpoint struct {
+type MyReactionEndpoint struct {
 	*endpoint
 }
 
-func (e *ReactionsEndpoint) Emoji(emoji string) *EmojiEndpoint {
-	return &EmojiEndpoint{e.appendMinor(emoji)}
+func (e *MessageEndpoint) MyReaction(emoji string) *MyReactionEndpoint {
+	// appendMinor("@me") because of Delete method that needs to be shared with other users.
+	e2 := e.Reactions().appendMinor(emoji).appendMinor("@me")
+	return &MyReactionEndpoint{e2}
 }
 
-func (e *EmojiEndpoint) GetReactions() (users []*User, err error) {
-	return users, e.doMethod("GET", nil, &users)
+func (e *MyReactionEndpoint) Create() error {
+	return e.doMethod("PUT", nil, nil)
+}
+
+func (e *MyReactionEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
 }
 
 type ReactionEndpoint struct {
 	*endpoint
 }
 
-func (e *EmojiEndpoint) Reaction(uID string) *ReactionEndpoint {
-	return &ReactionEndpoint{e.appendMinor(uID)}
-}
-
-func (e *ReactionEndpoint) Create() error {
-	return e.doMethod("PUT", nil, nil)
+func (e *MessageEndpoint) Reaction(emoji, uID string) *ReactionEndpoint {
+	e2 := e.Reactions().appendMinor(emoji).appendMinor(uID)
+	return &ReactionEndpoint{e2}
 }
 
 func (e *ReactionEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-type BulkDeleteEndpoint struct {
-	*endpoint
-}
-
-func (e *MessagesEndpoint) BulkDelete() *BulkDeleteEndpoint {
-	return &BulkDeleteEndpoint{e.appendMajor("bulk-delete")}
-}
-
-func (e *BulkDeleteEndpoint) Post(messageIDs []string) error {
-	return e.doMethod("POST", messageIDs, nil)
+func (e *MessagesEndpoint) BulkDelete(messageIDs []string) error {
+	e2 := e.appendMajor("bulk-delete")
+	return e2.doMethod("POST", messageIDs, nil)
 }
 
 type PermissionsEndpoint struct {
