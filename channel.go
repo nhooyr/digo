@@ -151,21 +151,12 @@ type Attachment struct {
 // TODO create mention method on User, Channel, Role and Custom ReactionEmoji structs
 // https://discordapp.com/developers/docs/resources/channel#message-formatting
 
-type ChannelsEndpoint struct {
-	*endpoint
-}
-
-func (c *Client) Channels() *ChannelsEndpoint {
-	e2 := c.e.appendMajor("channels")
-	return &ChannelsEndpoint{e2}
-}
-
 type ChannelEndpoint struct {
 	*endpoint
 }
 
-func (e *ChannelsEndpoint) One(cID string) *ChannelEndpoint {
-	e2 := e.appendMajor(cID)
+func (c *Client) Channel(cID string) *ChannelEndpoint {
+	e2 := c.e.appendMajor("channels").appendMajor(cID)
 	return &ChannelEndpoint{e2}
 }
 
@@ -181,7 +172,7 @@ type ChannelModifyParams struct {
 	UserLimit int    `json:"user_limit,omitempty"`
 }
 
-func (e *ChannelEndpoint) Patch(params *ChannelModifyParams) (ch *Channel, err error) {
+func (e *ChannelEndpoint) Modify(params *ChannelModifyParams) (ch *Channel, err error) {
 	return ch, e.doMethod("PATCH", params, &ch)
 }
 
@@ -242,7 +233,7 @@ type File struct {
 	Content io.Reader
 }
 
-func (e *MessagesEndpoint) Post(params *MessagesCreateParams) (m *Message, err error) {
+func (e *MessagesEndpoint) Create(params *MessagesCreateParams) (m *Message, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
@@ -285,8 +276,9 @@ type MessageEndpoint struct {
 	*endpoint
 }
 
-func (e *MessagesEndpoint) One(mID string) *MessageEndpoint {
-	return &MessageEndpoint{e.appendMinor(mID)}
+func (e *ChannelEndpoint) Message(mID string) *MessageEndpoint {
+	e2 := e.Messages().appendMinor(mID)
+	return &MessageEndpoint{e2}
 }
 
 func (e *MessageEndpoint) Get() (m *Message, err error) {
@@ -318,16 +310,16 @@ func (e *ReactionsEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-type EmojiEndpoint struct {
+type EmojiReactionsEndpoint struct {
 	*endpoint
 }
 
-func (e *ReactionsEndpoint) Emoji(emoji string) *EmojiEndpoint {
+func (e *MessageEndpoint) Emoji(emoji string) *EmojiReactionsEndpoint {
 	e2 := e.appendMinor(emoji)
-	return &EmojiEndpoint{e2}
+	return &EmojiReactionsEndpoint{e2}
 }
 
-func (e *EmojiEndpoint) Get() (users []*User, err error) {
+func (e *EmojiReactionsEndpoint) Get() (users []*User, err error) {
 	return users, e.doMethod("GET", nil, &users)
 }
 
@@ -335,7 +327,7 @@ type ReactionEndpoint struct {
 	*endpoint
 }
 
-func (e *EmojiEndpoint) User(uID string) *ReactionEndpoint {
+func (e *EmojiReactionsEndpoint) User(uID string) *ReactionEndpoint {
 	e2 := e.appendMinor(uID)
 	return &ReactionEndpoint{e2}
 }
@@ -344,50 +336,29 @@ func (e *ReactionEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-type MyReactionEndpoint struct {
-	*endpoint
-}
-
-func (e *EmojiEndpoint) My() *MyReactionEndpoint {
+func (e *EmojiReactionsEndpoint) Create() error {
 	e2 := e.appendMinor("@me")
-	return &MyReactionEndpoint{e2}
-}
-
-func (e *MyReactionEndpoint) Put() error {
-	return e.doMethod("PUT", nil, nil)
-}
-
-func (e *MyReactionEndpoint) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+	return e2.doMethod("PUT", nil, nil)
 }
 
 type BulkDeleteEndpoint struct {
 	*endpoint
 }
 
-func (e *MessagesEndpoint) BulkDelete(messageIDs []string) *BulkDeleteEndpoint {
+func (e *MessagesEndpoint) BulkDelete() *BulkDeleteEndpoint {
 	e2 := e.appendMajor("bulk-delete")
 	return &BulkDeleteEndpoint{e2}
 }
 
-func (e *BulkDeleteEndpoint) Post(messageIDs []string) error {
+func (e *BulkDeleteEndpoint) Do(messageIDs []string) error {
 	return e.doMethod("POST", messageIDs, nil)
-}
-
-type PermissionOverwritesEndpoint struct {
-	*endpoint
-}
-
-func (e *ChannelEndpoint) PermissionOverwrites() *PermissionOverwritesEndpoint {
-	e2 := e.appendMajor("permissions")
-	return &PermissionOverwritesEndpoint{e2}
 }
 
 type PermissionOverwriteEndpoint struct {
 	*endpoint
 }
 
-func (e *PermissionOverwritesEndpoint) One(overwriteID string) *PermissionOverwriteEndpoint {
+func (e *ChannelEndpoint) PermissionOverwrite(overwriteID string) *PermissionOverwriteEndpoint {
 	e2 := e.appendMajor("permissions").appendMinor(overwriteID)
 	return &PermissionOverwriteEndpoint{e2}
 }
@@ -427,7 +398,7 @@ type InviteCreateParams struct {
 }
 
 func (e *InvitesEndpoint) Create(params *InviteCreateParams) (invite *Invite, err error) {
-	return invite, e.doMethod("GET", params, &invite)
+	return invite, e.doMethod("POST", params, &invite)
 }
 
 type TypingIndicatorEndpoint struct {
@@ -439,7 +410,7 @@ func (e *ChannelEndpoint) TypingIndicator() *TypingIndicatorEndpoint {
 	return &TypingIndicatorEndpoint{e2}
 }
 
-func (e *TypingIndicatorEndpoint) Post() error {
+func (e *TypingIndicatorEndpoint) Trigger() error {
 	return e.doMethod("POST", nil, nil)
 }
 
@@ -460,12 +431,12 @@ type PinEndpoint struct {
 	*endpoint
 }
 
-func (e *PinsEndpoint) One(mID string) *PinEndpoint {
-	e2 := e.appendMinor(mID)
+func (e *ChannelEndpoint) Pin(mID string) *PinEndpoint {
+	e2 := e.Pins().appendMinor(mID)
 	return &PinEndpoint{e2}
 }
 
-func (e *PinEndpoint) Put() error {
+func (e *PinEndpoint) Add() error {
 	return e.doMethod("PUT", nil, nil)
 }
 
@@ -473,21 +444,12 @@ func (e *PinEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-type RecipientsEndpoint struct {
-	*endpoint
-}
-
-func (e *ChannelEndpoint) Recipients() *RecipientsEndpoint {
-	e2 := e.appendMajor("recipients")
-	return &RecipientsEndpoint{e2}
-}
-
 type RecipientEndpoint struct {
 	*endpoint
 }
 
-func (e *RecipientsEndpoint) One(uID string) *RecipientEndpoint {
-	e2 := e.appendMinor(uID)
+func (e *ChannelEndpoint) Recipient(uID string) *RecipientEndpoint {
+	e2 := e.appendMajor("recipients").appendMinor(uID)
 	return &RecipientEndpoint{e2}
 }
 
@@ -495,6 +457,6 @@ func (e *RecipientEndpoint) Add() error {
 	return e.doMethod("PUT", nil, nil)
 }
 
-func (e *RecipientEndpoint) Remove() error {
+func (e *RecipientEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
