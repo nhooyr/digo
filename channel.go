@@ -188,14 +188,19 @@ func (e *ChannelEndpoint) Messages() *MessagesEndpoint {
 	return &MessagesEndpoint{e.appendMajor("messages")}
 }
 
-type MessagesGetParams struct {
+func (e *MessagesEndpoint) BulkDelete(messageIDs []string) error {
+	e2 := e.appendMajor("bulk-delete")
+	return e2.doMethod("POST", messageIDs, nil)
+}
+
+type GetMessagesParams struct {
 	AroundID string
 	BeforeID string
 	AfterID  string
 	Limit    int
 }
 
-func (params *MessagesGetParams) rawQuery() string {
+func (params *GetMessagesParams) rawQuery() string {
 	v := make(url.Values)
 	if params.AroundID != "" {
 		v.Set("around", params.AroundID)
@@ -212,7 +217,7 @@ func (params *MessagesGetParams) rawQuery() string {
 	return v.Encode()
 }
 
-func (e *MessagesEndpoint) Get(params *MessagesGetParams) (messages []*Message, err error) {
+func (e *MessagesEndpoint) Get(params *GetMessagesParams) (messages []*Message, err error) {
 	req := e.newRequest("GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
@@ -220,7 +225,7 @@ func (e *MessagesEndpoint) Get(params *MessagesGetParams) (messages []*Message, 
 	return messages, e.do(req, &messages)
 }
 
-type MessagesCreateParams struct {
+type CreateMessageParams struct {
 	Content string `json:"content,omitempty"`
 	Nonce   string `json:"nonce,omitempty"`
 	TTS     bool   `json:"tts,omitempty"`
@@ -233,7 +238,7 @@ type File struct {
 	Content io.Reader
 }
 
-func (e *MessagesEndpoint) Create(params *MessagesCreateParams) (m *Message, err error) {
+func (e *MessagesEndpoint) Create(params *CreateMessageParams) (m *Message, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
@@ -298,60 +303,28 @@ func (e *MessageEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-type ReactionsEndpoint struct {
-	*endpoint
+func (e *MessageEndpoint) reactions() *endpoint {
+	return e.appendMajor("reactions")
 }
 
-func (e *MessageEndpoint) Reactions() *ReactionsEndpoint {
-	return &ReactionsEndpoint{e.appendMajor("reactions")}
+func (e *MessageEndpoint) DeleteReactions() error {
+	e2 := e.reactions()
+	return e2.doMethod("DELETE", nil, nil)
 }
 
-func (e *ReactionsEndpoint) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e *MessageEndpoint) GetReactors(emoji string) (users []*User, err error) {
+	e2 := e.reactions().appendMinor(emoji)
+	return users, e2.doMethod("GET", nil, &users)
 }
 
-type EmojiReactionsEndpoint struct {
-	*endpoint
-}
-
-func (e *MessageEndpoint) Emoji(emoji string) *EmojiReactionsEndpoint {
-	e2 := e.appendMinor(emoji)
-	return &EmojiReactionsEndpoint{e2}
-}
-
-func (e *EmojiReactionsEndpoint) Get() (users []*User, err error) {
-	return users, e.doMethod("GET", nil, &users)
-}
-
-type ReactionEndpoint struct {
-	*endpoint
-}
-
-func (e *EmojiReactionsEndpoint) User(uID string) *ReactionEndpoint {
-	e2 := e.appendMinor(uID)
-	return &ReactionEndpoint{e2}
-}
-
-func (e *ReactionEndpoint) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
-}
-
-func (e *EmojiReactionsEndpoint) Create() error {
-	e2 := e.appendMinor("@me")
+func (e *MessageEndpoint) CreateReaction(emoji string) error {
+	e2 := e.reactions().appendMinor(emoji).appendMinor("@me")
 	return e2.doMethod("PUT", nil, nil)
 }
 
-type BulkDeleteEndpoint struct {
-	*endpoint
-}
-
-func (e *MessagesEndpoint) BulkDelete() *BulkDeleteEndpoint {
-	e2 := e.appendMajor("bulk-delete")
-	return &BulkDeleteEndpoint{e2}
-}
-
-func (e *BulkDeleteEndpoint) Do(messageIDs []string) error {
-	return e.doMethod("POST", messageIDs, nil)
+func (e *MessageEndpoint) DeleteReaction(emoji, uID string) error {
+	e2 := e.reactions().appendMinor(emoji).appendMinor(uID)
+	return e2.doMethod("DELETE", nil, nil)
 }
 
 type PermissionOverwriteEndpoint struct {
@@ -401,17 +374,9 @@ func (e *InvitesEndpoint) Create(params *InviteCreateParams) (invite *Invite, er
 	return invite, e.doMethod("POST", params, &invite)
 }
 
-type TypingIndicatorEndpoint struct {
-	*endpoint
-}
-
-func (e *ChannelEndpoint) TypingIndicator() *TypingIndicatorEndpoint {
+func (e *ChannelEndpoint) TriggerTypingIndicator() error {
 	e2 := e.appendMajor("typing")
-	return &TypingIndicatorEndpoint{e2}
-}
-
-func (e *TypingIndicatorEndpoint) Trigger() error {
-	return e.doMethod("POST", nil, nil)
+	return e2.doMethod("POST", nil, nil)
 }
 
 type PinsEndpoint struct {

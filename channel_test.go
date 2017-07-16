@@ -13,10 +13,10 @@ var (
 )
 
 func TestClient_GetChannelMessages(t *testing.T) {
-	params := &discgo.MessagesGetParams{
+	params := &discgo.GetMessagesParams{
 		Limit: 5,
 	}
-	messages, err := c.Channel(cID).Messages().Get(params)
+	messages, err := c.Channel(cID).messages().Get(params)
 	 				 c.GetMessages(cID, params)
 					 c.Channel(cID).GetMessages(params)
 	if err != nil {
@@ -32,7 +32,7 @@ func TestClient_CreateMessage(t *testing.T) {
 	}
 	defer f.Close()
 
-	params := &discgo.MessagesCreateParams{
+	params := &discgo.CreateMessageParams{
 		Content: "boar",
 		File: &discgo.File{
 			Name:    "screenshot.png",
@@ -45,7 +45,7 @@ func TestClient_CreateMessage(t *testing.T) {
 			},
 		},
 	}
-	msg, err := c.Channel(cID).Messages().Create(params)
+	msg, err := c.Channel(cID).messages().Create(params)
 	if err != nil {
 		t.Fatal(err)
 	}
