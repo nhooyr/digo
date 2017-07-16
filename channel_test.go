@@ -16,9 +16,7 @@ func TestClient_GetChannelMessages(t *testing.T) {
 	params := &discgo.GetMessagesParams{
 		Limit: 5,
 	}
-	messages, err := c.Channel(cID).messages().Get(params)
-	 				 c.GetMessages(cID, params)
-					 c.Channel(cID).GetMessages(params)
+	messages, err := c.Channel(cID).Messages().Get(params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +43,7 @@ func TestClient_CreateMessage(t *testing.T) {
 			},
 		},
 	}
-	msg, err := c.Channel(cID).messages().Create(params)
+	msg, err := c.Channel(cID).Messages().Create(params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,21 +51,14 @@ func TestClient_CreateMessage(t *testing.T) {
 }
 
 func TestClient_CreateReaction(t *testing.T) {
-	c.Channel(cID).Message(mID).Reactions().Emoji(emoji).Create()
-	c.Channel(cID).Message(mID).DeleteReactions(emoji)
-	c.Channel(cID).Message(mID).GetReactions(emoji)
-	c.Channel(cID).Message(mID).CreateReaction(emoji)
-	c.Channel(cID).Message(mID).DeleteReaction(emoji, uID)
-	c.Channel(cID).CreateReaction(mID, emoji)
-	c.Guild(gID).CreateChannel(params)
-	c.CreateChannel(gID, params)
+	err := c.Channel(cID).Message(mID).Reactions().Create(emoji)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClient_DeleteReaction(t *testing.T) {
-	err := c.DeleteReaction(cID, mID, emoji, "@me")
+	err := c.Channel(cID).Message(mID).Reaction(emoji, "@me").Delete()
 	if err != nil {
 		t.Fatal(err)
 	}

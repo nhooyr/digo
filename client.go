@@ -22,8 +22,8 @@ type Client struct {
 	UserAgent  string
 	HttpClient *http.Client
 
-	rl         *rateLimiter
-	e          *endpoint
+	rl *rateLimiter
+	e  *endpoint
 }
 
 const endpointAPI = "https://discordapp.com/api/"
@@ -75,7 +75,7 @@ func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, er
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
 	case http.StatusBadGateway:
-		return c.doN(req, rateLimitPath, n + 1)
+		return c.doN(req, rateLimitPath, n+1)
 	case http.StatusTooManyRequests:
 		// Do not increment n because the next request should always be tried.
 		return c.doN(req, rateLimitPath, n)
@@ -112,7 +112,7 @@ type APIError struct {
 	Response *http.Response
 	Body     []byte
 
-	JSON     *APIErrorJSON
+	JSON *APIErrorJSON
 }
 
 func (err *APIError) Error() string {

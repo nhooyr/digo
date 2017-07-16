@@ -97,11 +97,11 @@ type ParamsCreateGuild struct {
 }
 
 type ParamsCreateChannel struct {
-	Name                 string       `json:"name"`
-	Type                 string       `json:"type,omitempty"`
-	Bitrate              int          `json:"bitrate,omitempty"`
-	UserLimit            int          `json:"user_limit,omitempty"`
-	PermissionOverwrites []*Overwrite `json:"permission_overwrites,omitempty"`
+	Name                 string                 `json:"name"`
+	Type                 string                 `json:"type,omitempty"`
+	Bitrate              int                    `json:"bitrate,omitempty"`
+	UserLimit            int                    `json:"user_limit,omitempty"`
+	PermissionOverwrites []*PermissionOverwrite `json:"permission_overwrites,omitempty"`
 }
 
 // TODO Docs for this are not clear on what the Channels field should be, and the link for
