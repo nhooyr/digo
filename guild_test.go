@@ -56,7 +56,7 @@ func TestClient_GetGuildMembers(t *testing.T) {
 }
 
 func TestClient_ModifyGuildMember(t *testing.T) {
-	params := &discgo.ParamsModifyGuildMember{
+	params := &discgo.GuildMemberModifyParams{
 		Nick: "ggez",
 	}
 	err := c.ModifyGuildMember(gID, "97137587013050368", params)

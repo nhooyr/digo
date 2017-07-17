@@ -329,7 +329,7 @@ func (e *ReactionsEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-func (e *ReactionsEndpoint) GetReactors(emoji string) (users []*User, err error) {
+func (e *ReactionsEndpoint) Get(emoji string) (users []*User, err error) {
 	e2 := e.appendMinor(emoji)
 	return users, e2.doMethod("GET", nil, &users)
 }
