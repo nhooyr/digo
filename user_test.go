@@ -5,7 +5,7 @@ import "testing"
 var uID = "97133780153683968"
 
 func TestClient_GetUser(t *testing.T) {
-	u, err := c.GetUser("@me")
+	u, err := c.Me().Get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -13,7 +13,7 @@ func TestClient_GetUser(t *testing.T) {
 }
 
 func TestClient_GetMyGuilds(t *testing.T) {
-	guilds, err := c.GetMyGuilds(nil)
+	guilds, err := c.Me().Guilds().Get(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
