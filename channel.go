@@ -200,14 +200,14 @@ func (e *MessagesEndpoint) BulkDelete(messageIDs []string) error {
 	return e2.doMethod("POST", messageIDs, nil)
 }
 
-type GetMessagesParams struct {
+type MessagesGetParams struct {
 	AroundID string
 	BeforeID string
 	AfterID  string
 	Limit    int
 }
 
-func (params *GetMessagesParams) rawQuery() string {
+func (params *MessagesGetParams) rawQuery() string {
 	v := make(url.Values)
 	if params.AroundID != "" {
 		v.Set("around", params.AroundID)
@@ -224,7 +224,7 @@ func (params *GetMessagesParams) rawQuery() string {
 	return v.Encode()
 }
 
-func (e *MessagesEndpoint) Get(params *GetMessagesParams) (messages []*Message, err error) {
+func (e *MessagesEndpoint) Get(params *MessagesGetParams) (messages []*Message, err error) {
 	req := e.newRequest("GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
@@ -232,7 +232,7 @@ func (e *MessagesEndpoint) Get(params *GetMessagesParams) (messages []*Message, 
 	return messages, e.do(req, &messages)
 }
 
-type CreateMessageParams struct {
+type MessageCreateParams struct {
 	Content string `json:"content,omitempty"`
 	Nonce   string `json:"nonce,omitempty"`
 	TTS     bool   `json:"tts,omitempty"`
@@ -245,7 +245,7 @@ type File struct {
 	Content io.Reader
 }
 
-func (e *MessagesEndpoint) Create(params *CreateMessageParams) (m *Message, err error) {
+func (e *MessagesEndpoint) Create(params *MessageCreateParams) (m *Message, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
@@ -302,7 +302,7 @@ type MessageEditParams struct {
 	Embed   *Embed `json:"embed,omitempty"`
 }
 
-func (e *MessageEndpoint) Patch(params *MessageEditParams) (m *Message, err error) {
+func (e *MessageEndpoint) Edit(params *MessageEditParams) (m *Message, err error) {
 	return m, e.doMethod("PATCH", params, &m)
 }
 
@@ -310,6 +310,7 @@ func (e *MessageEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
+// TODO not a fan of this API design, revisit later maybe
 type ReactionsEndpoint struct {
 	*endpoint
 }
@@ -322,7 +323,7 @@ func (e *ReactionsEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-func (e *ReactionsEndpoint) Get(emoji string) (users []*User, err error) {
+func (e *ReactionsEndpoint) GetReactors(emoji string) (users []*User, err error) {
 	e2 := e.appendMinor(emoji)
 	return users, e2.doMethod("GET", nil, &users)
 }
@@ -336,6 +337,7 @@ type ReactionEndpoint struct {
 	*endpoint
 }
 
+// uID = @me to delete your reaction.
 func (e *MessageEndpoint) Reaction(emoji, uID string) *ReactionEndpoint {
 	e2 := e.Reactions().appendMinor(emoji).appendMinor(uID)
 	return &ReactionEndpoint{e2}
@@ -392,9 +394,17 @@ func (e *InvitesEndpoint) Create(params *InviteCreateParams) (invite *Invite, er
 	return invite, e.doMethod("POST", params, &invite)
 }
 
-func (e *ChannelEndpoint) TriggerTypingIndicator() error {
+type TypingIndicatorEndpoint struct {
+	*endpoint
+}
+
+func (e *ChannelEndpoint) TypingIndicator() *TypingIndicatorEndpoint {
 	e2 := e.appendMajor("typing")
-	return e2.doMethod("POST", nil, nil)
+	return &TypingIndicatorEndpoint{e2}
+}
+
+func (e *TypingIndicatorEndpoint) Trigger() error {
+	return e.doMethod("POST", nil, nil)
 }
 
 type PinsEndpoint struct {

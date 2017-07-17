@@ -13,7 +13,7 @@ var (
 )
 
 func TestClient_GetChannelMessages(t *testing.T) {
-	params := &discgo.GetMessagesParams{
+	params := &discgo.MessagesGetParams{
 		Limit: 5,
 	}
 	messages, err := c.Channel(cID).Messages().Get(params)
@@ -30,7 +30,9 @@ func TestClient_CreateMessage(t *testing.T) {
 	}
 	defer f.Close()
 
-	params := &discgo.CreateMessageParams{
+	c.Channel(cID).Message(mID).Reactions().Emoji(emoji).User(uID).Delete()
+
+	params := &discgo.MessageCreateParams{
 		Content: "boar",
 		File: &discgo.File{
 			Name:    "screenshot.png",
