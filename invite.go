@@ -33,23 +33,23 @@ type InviteChannel struct {
 	Type string `json:"type"`
 }
 
-func (c *Client) GetInvite(inviteCode string) (inv *Invite, err error) {
-	endpoint := path.Join("invites", inviteCode)
-	req := c.newRequest("GET", endpoint, nil)
-	rateLimitPath := path.Join("invites", "*")
-	return inv, c.doUnmarshal(req, rateLimitPath, &inv)
+type InviteEndpoint struct {
+	*endpoint
 }
 
-func (c *Client) DeleteInvite(inviteCode string) (inv *Invite, err error) {
-	endpoint := path.Join("invites", inviteCode)
-	req := c.newRequest("DELETE", endpoint, nil)
-	rateLimitPath := path.Join("invites", "*")
-	return inv, c.doUnmarshal(req, rateLimitPath, &inv)
+func (c *Client) Invite(inviteCode string) InviteEndpoint {
+	e2 := c.e.appendMajor("invites").appendMinor(inviteCode)
+	return InviteEndpoint{e2}
 }
 
-func (c *Client) AcceptInvite(inviteCode string) (inv *Invite, err error) {
-	endpoint := path.Join("invites", inviteCode)
-	req := c.newRequest("POST", endpoint, nil)
-	rateLimitPath := path.Join("invites", "*")
-	return inv, c.doUnmarshal(req, rateLimitPath, &inv)
+func (e InviteEndpoint) Get() (inv *Invite, err error) {
+	return inv, e.doMethod("GET", nil, &inv)
+}
+
+func (e InviteEndpoint) Delete() (inv *Invite, err error) {
+	return inv, e.doMethod("DELETE", nil, &inv)
+}
+
+func (e InviteEndpoint) Accept() (inv *Invite, err error) {
+	return inv, e.doMethod("POST", nil, &inv)
 }

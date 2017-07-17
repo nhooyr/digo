@@ -336,10 +336,10 @@ func (e RolesEndpoint) Get() (roles []*Role, err error) {
 type RoleCreateParams struct {
 	Name string `json:"name,omitempty"`
 	// TODO should be null?
-	Permissions int    `json:"permissions,omitempty"`
-	Color       int    `json:"color,omitempty"`
-	Hoist       bool   `json:"hoist,omitempty"`
-	Mentionable bool   `json:"mentionable,omitempty"`
+	Permissions int  `json:"permissions,omitempty"`
+	Color       int  `json:"color,omitempty"`
+	Hoist       bool `json:"hoist,omitempty"`
+	Mentionable bool `json:"mentionable,omitempty"`
 }
 
 func (e RolesEndpoint) Create(params *RoleCreateParams) (r *Role, err error) {
@@ -418,18 +418,9 @@ func (e PruneEndpoint) Begin(days int) (pruned int, err error) {
 	return prunedStruct.Pruned, e.do(req, &prunedStruct)
 }
 
-// TODO move to voice.go
-type VoiceRegionsEndpoint struct {
-	*endpoint
-}
-
 func (e GuildEndpoint) VoiceRegions() VoiceRegionsEndpoint {
 	e2 := e.appendMajor("regions")
 	return VoiceRegionsEndpoint{e2}
-}
-
-func (e VoiceRegionsEndpoint) Get() (voiceRegions []*VoiceRegion, err error) {
-	return voiceRegions, e.doMethod("GET", nil, &voiceRegions)
 }
 
 func (e GuildEndpoint) Invites() InvitesEndpoint {

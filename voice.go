@@ -25,8 +25,15 @@ type VoiceRegion struct {
 	Custom         bool   `json:"custom"`
 }
 
-func (c *Client) GetVoiceRegions() (regions []*VoiceRegion, err error) {
-	endpoint := path.Join("voice", "regions")
-	req := c.newRequest("GET", endpoint, nil)
-	return regions, c.doUnmarshal(req, endpoint, &regions)
+type VoiceRegionsEndpoint struct {
+	*endpoint
+}
+
+func (c *Client) VoiceRegions() VoiceRegionsEndpoint {
+	e2 := c.e.appendMajor("voice").appendMajor("regions")
+	return VoiceRegionsEndpoint{e2}
+}
+
+func (e VoiceRegionsEndpoint) Get() (voiceRegions []*VoiceRegion, err error) {
+	return voiceRegions, e.doMethod("GET", nil, &voiceRegions)
 }
