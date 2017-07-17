@@ -406,35 +406,40 @@ func (e *ChannelEndpoint) Pins() *PinsEndpoint {
 	return &PinsEndpoint{e2}
 }
 
-func (e *PinsEndpoint) Add(mID string) error {
-	e2 := e.appendMinor(mID)
-	return e2.doMethod("PUT", nil, nil)
-}
-
-func (e *PinsEndpoint) Delete(mID string) error {
-	e2 := e.appendMinor(mID)
-	return e2.doMethod("DELETE", nil, nil)
-}
-
 func (e *PinsEndpoint) Get() (messages []*Message, err error) {
 	return messages, e.doMethod("GET", nil, &messages)
 }
 
-type RecipientsEndpoint struct {
+type PinEndpoint struct {
 	*endpoint
 }
 
-func (e *ChannelEndpoint) Recipients() *RecipientsEndpoint {
-	e2 := e.appendMajor("recipients")
-	return &RecipientsEndpoint{e2}
+func (e *ChannelEndpoint) Pin(mID string) *PinEndpoint {
+	e2 := e.Pins().appendMinor(mID)
+	return &PinEndpoint{e2}
 }
 
-func (e *RecipientsEndpoint) Add(uID string) error {
-	e2 := e.appendMinor(uID)
-	return e2.doMethod("PUT", nil, nil)
+func (e *PinEndpoint) Add() error {
+	return e.doMethod("PUT", nil, nil)
 }
 
-func (e *RecipientsEndpoint) Delete(uID string) error {
-	e2 := e.appendMinor(uID)
-	return e2.doMethod("DELETE", nil, nil)
+func (e *PinEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
+}
+
+type RecipientEndpoint struct {
+	*endpoint
+}
+
+func (e *ChannelEndpoint) Recipient(uID string) *RecipientEndpoint {
+	e2 := e.appendMajor("recipients").appendMinor(uID)
+	return &RecipientEndpoint{e2}
+}
+
+func (e *RecipientEndpoint) Add() error {
+	return e.doMethod("PUT", nil, nil)
+}
+
+func (e *RecipientEndpoint) Delete() error {
+	return e.doMethod("DELETE", nil, nil)
 }
