@@ -92,9 +92,9 @@ type GuildsEndpoint struct {
 	*endpoint
 }
 
-func (c *Client) Guilds() *GuildsEndpoint {
+func (c *Client) Guilds() GuildsEndpoint {
 	e2 := c.e.appendMajor("guilds")
-	return &GuildsEndpoint{e2}
+	return GuildsEndpoint{e2}
 }
 
 type GuildsCreateParams struct {
@@ -117,7 +117,7 @@ type GuildChannelCreateParams struct {
 }
 
 // TODO Docs for this are not clear on what the Channels field should be, and the link for that field is broken.
-func (e *GuildsEndpoint) Create(params *GuildsCreateParams) (g *Guild, err error) {
+func (e GuildsEndpoint) Create(params *GuildsCreateParams) (g *Guild, err error) {
 	return g, e.doMethod("POST", params, &g)
 }
 
@@ -176,11 +176,11 @@ func (e GuildEndpoint) Channels() GuildChannelsEndpoint {
 	return GuildChannelsEndpoint{e2}
 }
 
-func (e *GuildChannelsEndpoint) Get() (channels []*Channel, err error) {
+func (e GuildChannelsEndpoint) Get() (channels []*Channel, err error) {
 	return channels, e.doMethod("GET", nil, &channels)
 }
 
-func (e *GuildChannelsEndpoint) Create(params *GuildChannelCreateParams) (ch *Channel, err error) {
+func (e GuildChannelsEndpoint) Create(params *GuildChannelCreateParams) (ch *Channel, err error) {
 	return ch, e.doMethod("POST", params, &ch)
 }
 
@@ -189,7 +189,7 @@ type GuildChannelsModifyPositionsParams struct {
 	Position int    `json:"position"`
 }
 
-func (e *GuildChannelsEndpoint) ModifyPositions(params []*GuildChannelsModifyPositionsParams) (channels *Channel, err error) {
+func (e GuildChannelsEndpoint) ModifyPositions(params []*GuildChannelsModifyPositionsParams) (channels *Channel, err error) {
 	return channels, e.doMethod("PATCH", params, &channels)
 }
 
@@ -261,7 +261,7 @@ type GuildMemberModifyParams struct {
 	ChannelID string  `json:"channel_id,omitempty"`
 }
 
-func (e *GuildMemberEndpoint) Modify(params *GuildMemberModifyParams) error {
+func (e GuildMemberEndpoint) Modify(params *GuildMemberModifyParams) error {
 	return e.doMethod("PATCH", params, nil)
 }
 
