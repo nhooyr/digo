@@ -56,7 +56,7 @@ func TestClient_GetGuildMembers(t *testing.T) {
 
 func TestClient_ModifyGuildMember(t *testing.T) {
 	params := &discgo.GuildMemberModifyParams{
-		Nick: "ggez",
+		Nick: "fdkg",
 	}
 	err := c.Guild(gID).Member(uID).Modify(params)
 	if err != nil {
@@ -65,7 +65,7 @@ func TestClient_ModifyGuildMember(t *testing.T) {
 }
 
 func TestClient_ModifyMyNick(t *testing.T) {
-	nick, err := c.Guild(gID).ModifyMyNick("LOL REKT")
+	nick, err := c.Guild(gID).Me().ModifyNick("xd RssEKT")
 	if err != nil {
 		t.Fatal(err)
 	}
