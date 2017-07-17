@@ -1,7 +1,6 @@
 package discgo
 
 import (
-	"path"
 	"time"
 )
 

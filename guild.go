@@ -2,7 +2,6 @@ package discgo
 
 import (
 	"net/url"
-	"path"
 	"strconv"
 	"time"
 )
@@ -456,7 +455,7 @@ type IntegrationEndpoint struct {
 
 func (e GuildEndpoint) Integration(integrationID string) IntegrationEndpoint {
 	e2 := e.Integrations().appendMinor(integrationID)
-	return IntegrationsEndpoint{e2}
+	return IntegrationEndpoint{e2}
 }
 
 type IntegrationModifyParams struct {

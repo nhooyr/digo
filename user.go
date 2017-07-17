@@ -2,7 +2,6 @@ package discgo
 
 import (
 	"net/url"
-	"path"
 	"strconv"
 )
 
