@@ -8,7 +8,7 @@ import (
 var gID = "331307058660114433"
 
 func TestClient_CreateGuild(t *testing.T) {
-	params := discgo.ParamsCreateGuild{
+	params := discgo.GuildsCreateParams{
 		Name: "REKTERONIED",
 	}
 	g, err := c.CreateGuild(params)

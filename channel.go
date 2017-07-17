@@ -10,6 +10,7 @@ import (
 
 	"bytes"
 	"fmt"
+	"gopkg.in/guregu/null.v3"
 	"io"
 	"mime/multipart"
 )
@@ -172,11 +173,11 @@ func (e *ChannelEndpoint) Get() (ch *Channel, err error) {
 }
 
 type ChannelModifyParams struct {
-	Name      string `json:"name,omitempty"`
-	Position  int    `json:"position,omitempty"`
-	Topic     string `json:"topic,omitempty"`
-	Bitrate   int    `json:"bitrate,omitempty"`
-	UserLimit int    `json:"user_limit,omitempty"`
+	Name      string      `json:"name,omitempty"`
+	Position  int         `json:"position,omitempty"`
+	Topic     null.String `json:"topic"`
+	Bitrate   int         `json:"bitrate,omitempty"`
+	UserLimit null.Int    `json:"user_limit"`
 }
 
 func (e *ChannelEndpoint) Modify(params *ChannelModifyParams) (ch *Channel, err error) {
@@ -195,9 +196,13 @@ func (e *ChannelEndpoint) Messages() *MessagesEndpoint {
 	return &MessagesEndpoint{e.appendMajor("messages")}
 }
 
-func (e *MessagesEndpoint) BulkDelete(messageIDs []string) error {
+type MessagesBulkDeleteParams struct {
+	Messages []string `json:"messages"`
+}
+
+func (e *MessagesEndpoint) BulkDelete(params *MessagesBulkDeleteParams) error {
 	e2 := e.appendMajor("bulk-delete")
-	return e2.doMethod("POST", messageIDs, nil)
+	return e2.doMethod("POST", params, nil)
 }
 
 type MessagesGetParams struct {
@@ -298,6 +303,7 @@ func (e *MessageEndpoint) Get() (m *Message, err error) {
 }
 
 type MessageEditParams struct {
+	// TODO should I allow setting the content to ""?
 	Content string `json:"content,omitempty"`
 	Embed   *Embed `json:"embed,omitempty"`
 }
@@ -384,10 +390,10 @@ func (e *InvitesEndpoint) Get() (invites []*Invite, err error) {
 }
 
 type InviteCreateParams struct {
-	MaxAge    int  `json:"max_age,omitempty"`
-	MaxUses   int  `json:"max_uses,omitempty"`
-	Temporary bool `json:"temporary,omitempty"`
-	Unique    bool `json:"unique,omitempty"`
+	MaxAge    null.Int `json:"max_age"`
+	MaxUses   null.Int `json:"max_uses"`
+	Temporary bool     `json:"temporary,omitempty"`
+	Unique    bool     `json:"unique,omitempty"`
 }
 
 func (e *InvitesEndpoint) Create(params *InviteCreateParams) (invite *Invite, err error) {
@@ -446,8 +452,13 @@ func (e *ChannelEndpoint) Recipient(uID string) *RecipientEndpoint {
 	return &RecipientEndpoint{e2}
 }
 
-func (e *RecipientEndpoint) Add() error {
-	return e.doMethod("PUT", nil, nil)
+type RecipientAddParams struct {
+	AccessToken string `json:"access_token"`
+	Nick        string `json:"nick"`
+}
+
+func (e *RecipientEndpoint) Add(params *RecipientAddParams) error {
+	return e.doMethod("PUT", params, nil)
 }
 
 func (e *RecipientEndpoint) Delete() error {

@@ -8,36 +8,39 @@ import (
 )
 
 type Guild struct {
-	ID                          string
-	Name                        string
-	Icon                        string
-	Splash                      string
-	OwnerID                     string
-	Region                      string
-	AFKChannelID                string
-	AFKTimeout                  int
-	EmbedEnabled                bool
-	EmbedChannelID              string
-	VerificationLevel           int
-	DefaultMessageNotifications int
-	Roles                       []*Role
-	Emojis                      []*GuildEmoji
-	Features                    []string // not sure if this is right, DiscordGo doesn't have anything
-	MFALevel                    int
-	JoinedAt                    *time.Time
-	Large                       bool
-	Unavailable                 bool
-	MemberCount                 int
-	VoiceStates                 []*VoiceState // without guild_id key
-	Members                     []*GuildMember
-	Channels                    []*Channel
-	Presences                   []*Presence // TODO like presence update event sans a roles or guild_id key
+	ID                          string        `json:"id"`
+	Name                        string        `json:"name"`
+	Icon                        string        `json:"icon"`
+	Splash                      string        `json:"splash"`
+	OwnerID                     string        `json:"owner_id"`
+	Region                      string        `json:"region"`
+	AFKChannelID                string        `json:"afk_channel_id"`
+	AFKTimeout                  int           `json:"afk_timeout"`
+	EmbedEnabled                bool          `json:"embed_enabled"`
+	EmbedChannelID              string        `json:"embed_channel_id"`
+	VerificationLevel           int           `json:"verification_level"`
+	DefaultMessageNotifications int           `json:"default_message_notifications"`
+	Roles                       []*Role       `json:"roles"`
+	Emojis                      []*GuildEmoji `json:"emojis"`
+	Features                    []string      `json:"features"` // not sure if this is right, DiscordGo doesn't have anything
+	MFALevel                    int           `json:"mfa_level"`
+	JoinedAt                    time.Time     `json:"joined_at"`
+
+	// These fields are only sent within the GUILD_CREATE event
+	Large       *bool           `json:"large"`
+	Unavailable *bool           `json:"unavailable"`
+	MemberCount *int            `json:"member_count"`
+	VoiceStates *[]*VoiceState  `json:"voice_states"` // without guild_id key
+	Members     *[]*GuildMember `json:"members"`
+	Channels    *[]*Channel     `json:"channels"`
+	Presences   *[]*Presence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
 }
 
+// TOOD maybe Guild Presence rename?
 type Presence struct {
-	User   *User
-	Game   *Game
-	Status string
+	User   *User  `json:"user"`
+	Game   *Game  `json:"game"`
+	Status string `json:"status"`
 }
 
 type UnavailableGuild struct {
@@ -86,17 +89,17 @@ type GuildEmoji struct {
 	Managed       bool
 }
 
-type ParamsCreateGuild struct {
+type GuildsCreateParams struct {
 	Name                        string                 `json:"name,omitempty"`
 	Region                      string                 `json:"region,omitempty"`
 	Icon                        string                 `json:"icon,omitempty"`
 	VerificationLevel           int                    `json:"verification_level,omitempty"`
 	DefaultMessageNotifications int                    `json:"default_message_notifications,omitempty"`
 	Roles                       []*Role                `json:"roles,omitempty"`
-	Channels                    []*ParamsCreateChannel `json:"channels,omitempty"`
+	Channels                    []*ChannelCreateParams `json:"channels,omitempty"`
 }
 
-type ParamsCreateChannel struct {
+type ChannelCreateParams struct {
 	Name                 string                 `json:"name"`
 	Type                 string                 `json:"type,omitempty"`
 	Bitrate              int                    `json:"bitrate,omitempty"`
@@ -104,9 +107,12 @@ type ParamsCreateChannel struct {
 	PermissionOverwrites []*PermissionOverwrite `json:"permission_overwrites,omitempty"`
 }
 
-// TODO Docs for this are not clear on what the Channels field should be, and the link for
-// that field is broken.
-func (c *Client) CreateGuild(params ParamsCreateGuild) (g *Guild, err error) {
+func (c *Client) Guilds() *GuildsEndpoint {
+
+}
+
+// TODO Docs for this are not clear on what the Channels field should be, and the link for that field is broken.
+func (c *Client) CreateGuild(params GuildsCreateParams) (g *Guild, err error) {
 	endpoint := "guilds"
 	req := c.newRequestJSON("POST", endpoint, params)
 	return g, c.doUnmarshal(req, endpoint, &g)
@@ -148,7 +154,7 @@ func (c *Client) GetChannels(gID string) (channels []*Channel, err error) {
 	return channels, c.doUnmarshal(req, endpoint, &channels)
 }
 
-func (c *Client) CreateChannel(gID string, params *ParamsCreateChannel) (ch *Channel, err error) {
+func (c *Client) CreateChannel(gID string, params *ChannelCreateParams) (ch *Channel, err error) {
 	endpoint := path.Join("guilds", gID, "channels")
 	req := c.newRequestJSON("POST", endpoint, params)
 	return ch, c.doUnmarshal(req, endpoint, &ch)
