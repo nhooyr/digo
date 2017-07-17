@@ -376,6 +376,7 @@ func (e *PermissionOverwriteEndpoint) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
+// TODO move somewhere where it can be shared between guild.go and channel.go
 type InvitesEndpoint struct {
 	*endpoint
 }
