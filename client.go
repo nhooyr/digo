@@ -9,7 +9,6 @@ import (
 
 	"bytes"
 
-	"path"
 	"time"
 )
 
@@ -26,7 +25,7 @@ type Client struct {
 	e  *endpoint
 }
 
-const endpointAPI = "https://discordapp.com/api/"
+const endpointAPI = "https://discordapp.com/api"
 
 func NewClient() *Client {
 	c := &Client{
@@ -85,7 +84,6 @@ func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, er
 			Response: resp,
 			Body:     body,
 		}
-		body := []byte{}
 		// Ignore error because we may not have a error response at all.
 		// And APIError.Error() will print the response body so if there is an
 		// error in the JSON, it will be known.
@@ -131,8 +129,8 @@ type endpoint struct {
 
 func (e *endpoint) append(urlElement, rateLimitPathElement string) *endpoint {
 	e2 := &endpoint{e.c, e.url, e.rateLimitPath}
-	e2.url = path.Join(e.url, urlElement)
-	e2.rateLimitPath = path.Join(e.rateLimitPath, rateLimitPathElement)
+	e2.url += "/" + urlElement
+	e2.rateLimitPath += "/" + rateLimitPathElement
 	return e2
 }
 

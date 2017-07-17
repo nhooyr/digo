@@ -17,7 +17,7 @@ func init() {
 
 func TestClient_APIError(t *testing.T) {
 	c := discgo.NewClient()
-	_, err := c.Me().Get()
+	_, err := c.Me().Connections().Get()
 	if err == nil {
 		t.Fatal("expected non nil error")
 	}

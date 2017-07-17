@@ -24,7 +24,7 @@ func TestClient_GetChannelMessages(t *testing.T) {
 }
 
 func TestClient_CreateMessage(t *testing.T) {
-	f, err := os.Open("/Users/poonam566/Desktop/screenshot.png")
+	f, err := os.Open("/Users/nhooyr/Desktop/screenshot.png")
 	if err != nil {
 		t.Fatal(err)
 	}
