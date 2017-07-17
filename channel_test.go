@@ -30,8 +30,6 @@ func TestClient_CreateMessage(t *testing.T) {
 	}
 	defer f.Close()
 
-	c.Channel(cID).Message(mID).Reactions().Emoji(emoji).User(uID).Delete()
-
 	params := &discgo.MessageCreateParams{
 		Content: "boar",
 		File: &discgo.File{
@@ -67,7 +65,7 @@ func TestClient_DeleteReaction(t *testing.T) {
 }
 
 func TestClient_GetReactions(t *testing.T) {
-	users, err := c.GetReactions(cID, mID, emoji)
+	users, err := c.Channel(cID).Message(mID).Reactions().Get(emoji)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +73,7 @@ func TestClient_GetReactions(t *testing.T) {
 }
 
 func TestClient_DeleteReactions(t *testing.T) {
-	err := c.DeleteReactions(cID, mID)
+	err := c.Channel(cID).Message(mID).Reactions().Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +83,7 @@ func TestClient_UpdateMessage(t *testing.T) {
 	params := &discgo.MessageEditParams{
 		Content: "updated wow",
 	}
-	m, err := c.EditMessage(cID, mID, params)
+	m, err := c.Channel(cID).Message(mID).Edit(params)
 	if err != nil {
 		t.Fatal(err)
 	}
