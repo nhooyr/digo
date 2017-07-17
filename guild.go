@@ -156,6 +156,7 @@ func (e GuildEndpoint) Delete() (g *Guild, err error) {
 }
 
 // TODO not sure if necessary, there is a GuildMemberEndpoint.Modify, not sure if it takes @me. @abalabahaha#9421 on discord said that perhaps its different because modifying my nick and managing others is a different permission but that does not really make sense to me. But whatever...
+// TODO i also don't really like the name, doesn't fit in
 func (e GuildEndpoint) ModifyMyNick(nick string) (newNick string, err error) {
 	e2 := e.Member("@me").appendMajor("nick")
 	nickStruct := struct {
@@ -175,7 +176,7 @@ func (e GuildEndpoint) Channels() GuildChannelsEndpoint {
 	return GuildChannelsEndpoint{e2}
 }
 
-func (e *GuildChannelsEndpoint) Get(gID string) (channels []*Channel, err error) {
+func (e *GuildChannelsEndpoint) Get() (channels []*Channel, err error) {
 	return channels, e.doMethod("GET", nil, &channels)
 }
 

@@ -8,10 +8,10 @@ import (
 var gID = "331307058660114433"
 
 func TestClient_CreateGuild(t *testing.T) {
-	params := discgo.GuildsCreateParams{
+	params := &discgo.GuildsCreateParams{
 		Name: "REKTERONIED",
 	}
-	g, err := c.CreateGuild(params)
+	g, err := c.Guilds().Create(params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,8 +19,7 @@ func TestClient_CreateGuild(t *testing.T) {
 }
 
 func TestClient_DeleteGuild(t *testing.T) {
-	// TODO doesn't return any JSON for some reason?
-	g, err := c.DeleteGuild("334474961580195852")
+	g, err := c.Guild(gID).Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +27,7 @@ func TestClient_DeleteGuild(t *testing.T) {
 }
 
 func TestClient_GetChannels(t *testing.T) {
-	channels, err := c.GetChannels(gID)
+	channels, err := c.Guild(gID).Channels().Get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +35,7 @@ func TestClient_GetChannels(t *testing.T) {
 }
 
 func TestClient_GetGuildMember(t *testing.T) {
-	gm, err := c.GetGuildMember(gID, uID)
+	gm, err := c.Guild(gID).Member(uID).Get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +47,7 @@ func TestClient_GetGuildMember(t *testing.T) {
 }
 
 func TestClient_GetGuildMembers(t *testing.T) {
-	guildMembers, err := c.GetGuildMembers(gID, nil)
+	guildMembers, err := c.Guild(gID).Members().Get(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,14 +58,14 @@ func TestClient_ModifyGuildMember(t *testing.T) {
 	params := &discgo.GuildMemberModifyParams{
 		Nick: "ggez",
 	}
-	err := c.ModifyGuildMember(gID, "97137587013050368", params)
+	err := c.Guild(gID).Member(uID).Modify(params)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClient_ModifyMyNick(t *testing.T) {
-	nick, err := c.ModifyMyNick(gID, "LOL REKT")
+	nick, err := c.Guild(gID).ModifyMyNick("LOL REKT")
 	if err != nil {
 		t.Fatal(err)
 	}
