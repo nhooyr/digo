@@ -33,33 +33,57 @@ type Connection struct {
 	Integrations []*Integration `json:"integrations"`
 }
 
-// uID = "@me" for current user
-func (c *Client) GetUser(uID string) (u *User, err error) {
-	endpoint := path.Join("users", uID)
-	req := c.newRequest("GET", endpoint, nil)
-	rateLimitPath := path.Join("users", "*")
-	return u, c.doUnmarshal(req, rateLimitPath, &u)
+type UserEndpoint struct {
+	*endpoint
 }
 
-type ModifyMeParams struct {
+func (c *Client) User(uID string) UserEndpoint {
+	e2 := c.e.appendMajor("users").appendMinor(uID)
+	return UserEndpoint{e2}
+}
+
+func (e UserEndpoint) Get() (u *User, err error) {
+	return u, e.doMethod("GET", nil, &u)
+}
+
+type MeEndpoint struct {
+	*endpoint
+}
+
+func (c *Client) Me() MeEndpoint {
+	e2 := c.User("@me").endpoint
+	return MeEndpoint{e2}
+}
+
+func (e MeEndpoint) Get() (u *User, err error) {
+	return u, e.doMethod("GET", nil, &u)
+}
+
+type MeModifyParams struct {
 	Username string `json:"username"`
 	Avatar   string `json:"avatar"`
 }
 
-func (c *Client) ModifyMe(params *ModifyMeParams) (u *User, err error) {
-	endpoint := path.Join("users", "@me")
-	req := c.newRequestJSON("POST", endpoint, params)
-	rateLimitPath := path.Join("users", "*")
-	return u, c.doUnmarshal(req, rateLimitPath, &u)
+func (e MeEndpoint) Modify(params *MeModifyParams) (u *User, err error) {
+	return u, e.doMethod("PATCH", params, &u)
 }
 
-type GetMyGuildsParams struct {
+type MeGuildsEndpoint struct {
+	*endpoint
+}
+
+func (e MeEndpoint) Guilds() MeGuildsEndpoint {
+	e2 := e.appendMajor("guilds")
+	return MeGuildsEndpoint{e2}
+}
+
+type MeGuildsGetParams struct {
 	BeforeID string
 	AfterID  string
 	Limit    int
 }
 
-func (params *GetMyGuildsParams) rawQuery() string {
+func (params *MeGuildsGetParams) rawQuery() string {
 	v := url.Values{}
 	if params.BeforeID != "" {
 		v.Set("before", params.BeforeID)
@@ -73,50 +97,66 @@ func (params *GetMyGuildsParams) rawQuery() string {
 	return v.Encode()
 }
 
-func (c *Client) GetMyGuilds(params *GetMyGuildsParams) (guilds []*UserGuild, err error) {
-	endpoint := path.Join("users", "@me", "guilds")
-	req := c.newRequest("GET", endpoint, nil)
+func (e MeGuildsEndpoint) Get(params *MeGuildsGetParams) (guilds []*UserGuild, err error) {
+	req := e.newRequest("GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
 	}
-	return guilds, c.doUnmarshal(req, endpoint, &guilds)
+	return guilds, e.do(req, &guilds)
 }
 
-func (c *Client) LeaveGuild(gID string) error {
-	endpoint := path.Join("users", "@me", "guilds", gID)
-	req := c.newRequest("DELETE", endpoint, nil)
-	return c.do(req, endpoint)
+type MeGuildEndpoint struct {
+	*endpoint
 }
 
-func (c *Client) GetMyDMs() (dmChannels *[]Channel, err error) {
-	endpoint := path.Join("users", "@me", "channels")
-	req := c.newRequest("GET", endpoint, nil)
-	return dmChannels, c.doUnmarshal(req, endpoint, &dmChannels)
+func (e MeEndpoint) Guild(gID string) MeGuildEndpoint {
+	e2 := e.Guilds().appendMajor(gID)
+	return MeGuildEndpoint{e2}
 }
 
-type CreateDMParams struct {
+func (e MeGuildEndpoint) Leave() error {
+	return e.doMethod("DELETE", nil, nil)
+}
+
+type MeDMChannelsEndpoint struct {
+	*endpoint
+}
+
+func (e MeEndpoint) DMChannels() MeDMChannelsEndpoint {
+	e2 := e.appendMajor("channels")
+	return MeDMChannelsEndpoint{e2}
+}
+
+func (e MeDMChannelsEndpoint) Get() (dmChannels *[]Channel, err error) {
+	return dmChannels, e.doMethod("GET", nil, &dmChannels)
+}
+
+type DMChannelsCreateParams struct {
 	RecipientID string `json:"recipient_id"`
 }
 
-func (c *Client) CreateDM(params *CreateDMParams) (ch *Channel, err error) {
-	endpoint := path.Join("users", "@me", "channels")
-	req := c.newRequestJSON("POST", endpoint, params)
-	return ch, c.doUnmarshal(req, endpoint, &ch)
+func (e MeDMChannelsEndpoint) Create(params *DMChannelsCreateParams) (ch *Channel, err error) {
+	return ch, e.doMethod("POST", params, &ch)
 }
 
-type CreateGroupDMParams struct {
+type DmChannelsCreateGroupParams struct {
 	AccessTokens []string          `json:"access_tokens"`
 	Nicks        map[string]string `json:"nicks"`
 }
 
-func (c *Client) CreateGroupDM(params *CreateGroupDMParams) (ch *Channel, err error) {
-	endpoint := path.Join("users", "@me", "channels")
-	req := c.newRequestJSON("POST", endpoint, params)
-	return ch, c.doUnmarshal(req, endpoint, &ch)
+func (e MeDMChannelsEndpoint) CreateGroup(params *DmChannelsCreateGroupParams) (ch *Channel, err error) {
+	return ch, e.doMethod("POST", params, &ch)
 }
 
-func (c *Client) GetMyConnections() (connections []*Connection, err error) {
-	endpoint := path.Join("users", "@me", "connections")
-	req := c.newRequest("GET", endpoint, nil)
-	return connections, c.doUnmarshal(req, endpoint, &connections)
+type MeConnectionsEndpoint struct {
+	*endpoint
+}
+
+func (e MeEndpoint) Connections() MeConnectionsEndpoint {
+	e2 := e.appendMajor("connections")
+	return MeConnectionsEndpoint{e2}
+}
+
+func (e MeConnectionsEndpoint) Get() (connections []*Connection, err error) {
+	return connections, e.doMethod("GET", nil, &connections)
 }
