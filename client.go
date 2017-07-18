@@ -54,6 +54,7 @@ func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
 	return c.doN(req, rateLimitPath, 0)
 }
 
+// TODO should it be the library's purpose to retry?
 func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
 	prl := c.rl.getPathRateLimiter(rateLimitPath)
 	prl.lock()
