@@ -1,6 +1,9 @@
 package discgo
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestGatewayEndpoint_Get(t *testing.T) {
 	e := c.gateway()
@@ -17,4 +20,5 @@ func TestConn_Connect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(time.Second * 15)
 }
