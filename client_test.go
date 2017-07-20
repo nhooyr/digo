@@ -1,27 +1,26 @@
-package discgo_test
+package discgo
 
 import (
-	"github.com/nhooyr/discgo"
 	"net/http"
 	"os"
 	"testing"
 )
 
-var c *discgo.Client
+var c *Client
 
 func init() {
-	c = discgo.NewClient()
+	c = NewClient()
 	// TODO maybe make it all a simple struct like acme's autocert manager but that's so magical :(
 	c.Token = "Bot " + os.Getenv("DISCORD_TOKEN")
 }
 
 func TestClient_APIError(t *testing.T) {
-	c := discgo.NewClient()
+	c := NewClient()
 	_, err := c.Me().Connections().Get()
 	if err == nil {
 		t.Fatal("expected non nil error")
 	}
-	apiErr, ok := err.(*discgo.APIError)
+	apiErr, ok := err.(*APIError)
 	if !ok {
 		t.Fatal("expected error to be of type *discgo.APIError")
 	}

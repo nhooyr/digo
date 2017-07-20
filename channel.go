@@ -273,6 +273,7 @@ type MessageCreateParams struct {
 	Embed   *Embed `json:"embed,omitempty"`
 }
 
+// TODO perhaps make an interface? like http.File?
 type File struct {
 	Name    string
 	Content io.Reader

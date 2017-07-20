@@ -1,7 +1,6 @@
-package discgo_test
+package discgo
 
 import (
-	"github.com/nhooyr/discgo"
 	"os"
 	"testing"
 )
@@ -13,7 +12,7 @@ var (
 )
 
 func TestClient_GetChannelMessages(t *testing.T) {
-	params := &discgo.MessagesGetParams{
+	params := &MessagesGetParams{
 		Limit: 5,
 	}
 	messages, err := c.Channel(cID).Messages().Get(params)
@@ -30,15 +29,15 @@ func TestClient_CreateMessage(t *testing.T) {
 	}
 	defer f.Close()
 
-	params := &discgo.MessageCreateParams{
+	params := &MessageCreateParams{
 		Content: "boar",
-		File: &discgo.File{
+		File: &File{
 			Name:    "screenshot.png",
 			Content: f,
 		},
-		Embed: &discgo.Embed{
+		Embed: &Embed{
 			Description: "heads",
-			Image: &discgo.EmbedImage{
+			Image: &EmbedImage{
 				URL: "attachment://screenshot.png",
 			},
 		},
@@ -80,7 +79,7 @@ func TestClient_DeleteReactions(t *testing.T) {
 }
 
 func TestClient_UpdateMessage(t *testing.T) {
-	params := &discgo.MessageEditParams{
+	params := &MessageEditParams{
 		Content: "updated wow",
 	}
 	m, err := c.Channel(cID).Message(mID).Edit(params)
