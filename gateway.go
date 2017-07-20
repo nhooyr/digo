@@ -46,7 +46,7 @@ type Conn struct {
 	wsConn *websocket.Conn
 
 	mu                    sync.Mutex
-	heartbeatAwknowledged bool
+	heartbeatAcknowledged bool
 	sequenceNumber        *int
 }
 
@@ -76,7 +76,7 @@ func (c *Conn) Close() (err error) {
 	c.confirmClosedChan <- struct{}{}
 	c.closeOnce.Do(func() {
 		close(c.closeChan)
-		closeMsg := websocket.FormatCloseMessage(1001, "")
+		closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "")
 		err = c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
 		err2 := c.wsConn.Close()
 		if err == nil {
@@ -96,7 +96,7 @@ type helloOPData struct {
 }
 
 func (c *Conn) Connect() (err error) {
-	c.heartbeatAwknowledged = true
+	c.heartbeatAcknowledged = true
 
 	c.closeOnce = sync.Once{}
 	c.closeChan = make(chan struct{})
@@ -124,18 +124,6 @@ func (c *Conn) Connect() (err error) {
 		return err
 	}
 
-	p, err := c.nextPayload()
-	if err != nil {
-		return err
-	}
-
-	var hello *helloOPData
-	err = json.Unmarshal(p.Data, &hello)
-	if err != nil {
-		return err
-	}
-	// TODO remove
-	go c.heartbeat(hello)
 	go c.eventLoop()
 
 	return nil
@@ -179,11 +167,11 @@ func (c *Conn) eventLoop() {
 			return
 		}
 
-		c.mu.Lock()
 		if p.SequenceNumber != nil {
+			c.mu.Lock()
 			c.sequenceNumber = p.SequenceNumber
+			c.mu.Unlock()
 		}
-		c.mu.Unlock()
 
 		switch p.Operation {
 		case dispatchOperation:
@@ -198,10 +186,21 @@ func (c *Conn) eventLoop() {
 				c.sessionID = ready.SessionID
 			}
 			// TODO state tracking
+		case helloOperation:
+			var hello helloOPData
+			err = json.Unmarshal(p.Data, &hello)
+			if err != nil {
+				_ = c.Close()
+				// Log errors?
+				return
+			}
+			hello.HeartbeatInterval = 3000
+			c.heartbeatAcknowledged = false
+			go c.heartbeat(&hello)
 		case heartbeatACKOperation:
 			c.mu.Lock()
 			// TODO change back
-			c.heartbeatAwknowledged = false
+			c.heartbeatAcknowledged = false
 			c.mu.Unlock()
 		case invalidSessionOperation:
 			err := c.identify()
@@ -213,6 +212,7 @@ func (c *Conn) eventLoop() {
 		log.Print(p.Operation)
 		log.Print(p.Type)
 		log.Printf("%s", p.Data)
+		log.Print(p.SequenceNumber)
 		log.Print()
 	}
 }
@@ -259,12 +259,12 @@ func (c *Conn) heartbeat(hello *helloOPData) {
 			return
 		}
 		c.mu.Lock()
-		if !c.heartbeatAwknowledged {
+		if !c.heartbeatAcknowledged {
 			c.mu.Unlock()
 			_ = c.Close()
 			// TODO log error if unsuccessful connect/close
 			log.Print("type something quick")
-			time.Sleep(time.Second*5)
+			time.Sleep(time.Second * 5)
 			err := c.Connect()
 			log.Print(err)
 			return
@@ -276,7 +276,7 @@ func (c *Conn) heartbeat(hello *helloOPData) {
 			tmpCp := *c.sequenceNumber
 			sequenceNumberCopy = &tmpCp
 		}
-		c.heartbeatAwknowledged = true
+		c.heartbeatAcknowledged = true
 		c.mu.Unlock()
 
 		p := &sendPayload{Operation: heartbeatOperation, Data: sequenceNumberCopy}
