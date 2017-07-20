@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestGatewayEndpoint_Get(t *testing.T) {
+func EndpointTestGateway_Get(t *testing.T) {
 	e := c.gateway()
 	url, err := e.get()
 	if err != nil {
@@ -20,5 +20,5 @@ func TestConn_Connect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Second * 15)
+	time.Sleep(time.Second * 41*4)
 }

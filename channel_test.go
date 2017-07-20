@@ -12,7 +12,7 @@ var (
 )
 
 func TestClient_GetChannelMessages(t *testing.T) {
-	params := &MessagesGetParams{
+	params := &ParamsMessagesGet{
 		Limit: 5,
 	}
 	messages, err := c.Channel(cID).Messages().Get(params)
@@ -29,7 +29,7 @@ func TestClient_CreateMessage(t *testing.T) {
 	}
 	defer f.Close()
 
-	params := &MessageCreateParams{
+	params := &ParamsMessageCreate{
 		Content: "boar",
 		File: &File{
 			Name:    "screenshot.png",
@@ -79,7 +79,7 @@ func TestClient_DeleteReactions(t *testing.T) {
 }
 
 func TestClient_UpdateMessage(t *testing.T) {
-	params := &MessageEditParams{
+	params := &ParamsMessageEdit{
 		Content: "updated wow",
 	}
 	m, err := c.Channel(cID).Message(mID).Edit(params)

@@ -18,16 +18,16 @@ type Game struct {
 	URL  *string `json:"url"`
 }
 
-type gatewayEndpoint struct {
+type Endpointgateway struct {
 	*endpoint
 }
 
-func (c *Client) gateway() gatewayEndpoint {
+func (c *Client) gateway() Endpointgateway {
 	e2 := c.e.appendMajor("gateway")
-	return gatewayEndpoint{e2}
+	return Endpointgateway{e2}
 }
 
-func (g gatewayEndpoint) get() (url string, err error) {
+func (g Endpointgateway) get() (url string, err error) {
 	var urlStruct struct {
 		URL string `json:"url"`
 	}
@@ -58,7 +58,7 @@ func NewConn(apiClient *Client) *Conn {
 }
 
 const (
-	dispatchOperation            = iota
+	dispatchOperation = iota
 	heartbeatOperation
 	identifyOperation
 	statusUpdateOperation
@@ -135,7 +135,6 @@ func (c *Conn) Connect() (err error) {
 		return err
 	}
 	// TODO remove
-	hello.HeartbeatInterval = 3000
 	go c.heartbeat(hello)
 	go c.eventLoop()
 
@@ -145,7 +144,7 @@ func (c *Conn) Connect() (err error) {
 type resumeOPData struct {
 	Token     string `json:"token"`
 	SessionID string `json:"session_id"`
-	Seq       int `json:"seq"`
+	Seq       int    `json:"seq"`
 }
 
 func (c *Conn) resume() error {
@@ -211,7 +210,10 @@ func (c *Conn) eventLoop() {
 				return
 			}
 		}
+		log.Print(p.Operation)
+		log.Print(p.Type)
 		log.Printf("%s", p.Data)
+		log.Print()
 	}
 }
 
@@ -261,6 +263,8 @@ func (c *Conn) heartbeat(hello *helloOPData) {
 			c.mu.Unlock()
 			_ = c.Close()
 			// TODO log error if unsuccessful connect/close
+			log.Print("type something quick")
+			time.Sleep(time.Second*5)
 			err := c.Connect()
 			log.Print(err)
 			return
@@ -294,7 +298,7 @@ type sendPayload struct {
 type receivePayload struct {
 	Operation      int             `json:"op"`
 	Data           json.RawMessage `json:"d"`
-	SequenceNumber *int             `json:"s"`
+	SequenceNumber *int            `json:"s"`
 	Type           string          `json:"t"`
 }
 

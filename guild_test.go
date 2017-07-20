@@ -7,7 +7,7 @@ import (
 var gID = "331307058660114433"
 
 func TestClient_CreateGuild(t *testing.T) {
-	params := &GuildsCreateParams{
+	params := &ParamsGuildsCreate{
 		Name: "REKTERONIED",
 	}
 	g, err := c.Guilds().Create(params)
@@ -54,7 +54,7 @@ func TestClient_GetGuildMembers(t *testing.T) {
 }
 
 func TestClient_ModifyGuildMember(t *testing.T) {
-	params := &GuildMemberModifyParams{
+	params := &ParamsGuildMemberModify{
 		Nick: "fdkg",
 	}
 	err := c.Guild(gID).Member(uID).Modify(params)

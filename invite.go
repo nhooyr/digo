@@ -32,23 +32,23 @@ type InviteChannel struct {
 	Type channelType `json:"type"`
 }
 
-type InviteEndpoint struct {
+type EndpointInvite struct {
 	*endpoint
 }
 
-func (c *Client) Invite(inviteCode string) InviteEndpoint {
+func (c *Client) Invite(inviteCode string) EndpointInvite {
 	e2 := c.e.appendMajor("invites").appendMinor(inviteCode)
-	return InviteEndpoint{e2}
+	return EndpointInvite{e2}
 }
 
-func (e InviteEndpoint) Get() (inv *Invite, err error) {
+func (e EndpointInvite) Get() (inv *Invite, err error) {
 	return inv, e.doMethod("GET", nil, &inv)
 }
 
-func (e InviteEndpoint) Delete() (inv *Invite, err error) {
+func (e EndpointInvite) Delete() (inv *Invite, err error) {
 	return inv, e.doMethod("DELETE", nil, &inv)
 }
 
-func (e InviteEndpoint) Accept() (inv *Invite, err error) {
+func (e EndpointInvite) Accept() (inv *Invite, err error) {
 	return inv, e.doMethod("POST", nil, &inv)
 }
