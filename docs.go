@@ -4,6 +4,7 @@ TODO think about the license
 TODO need any nulls?
 TODO update names
 TODO update test names
+TODO multiple channel types
 TODO need context.Context on rest API methods?
 TODO does rest API even need to be exposed?
 TODO should I expose event handling logic or do it async in the library itself?

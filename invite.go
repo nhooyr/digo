@@ -29,7 +29,7 @@ type InviteGuild struct {
 type InviteChannel struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	Type string `json:"type"`
+	Type channelType `json:"type"`
 }
 
 type InviteEndpoint struct {

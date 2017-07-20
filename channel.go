@@ -16,21 +16,35 @@ import (
 )
 
 // Channel represents a channel in Discord.
-// If IsPrivate is set this is a DM Channel otherwise this is a Guild Channel.
 type Channel struct {
-	ID                   string                 `json:"id"`
-	GuildID              string                 `json:"guild_id"`
-	Name                 string                 `json:"name"`
-	Type                 string                 `json:"type"`
-	Position             int                    `json:"position"`
-	IsPrivate            bool                   `json:"is_private"`
-	Recipient            *User                  `json:"recipient"`
-	PermissionOverwrites []*PermissionOverwrite `json:"permission_overwrites"`
-	Topic                string                 `json:"topic"`
-	LastMessageID        string                 `json:"last_message_id"`
-	Bitrate              int                    `json:"bitrate"`
-	UserLimit            int                    `json:"user_limit"`
+	ID   string      `json:"id"`
+	Type channelType `json:"type"`
+
+	// All of these may be null. They are pointers so that consumer's
+	// of the package will be reminded that they may be null.
+	GuildID              *string                 `json:"guild_id"`
+	Position             *int                    `json:"position"`
+	PermissionOverwrites *[]*PermissionOverwrite `json:"permission_overwrites"`
+	Name                 *string                 `json:"name"`
+	Topic                *string                 `json:"topic"`
+	LastMessageID        *string                 `json:"last_message_id"`
+	Bitrate              *int                    `json:"bitrate"`
+	UserLimit            *int                    `json:"user_limit"`
+	Recipients           *[]*User                `json:"recipients"`
+	Icon                 *string                 `json:"icon"`
+	OwnerID              *string                 `json:"owner_id"`
+	ApplicationID        *string                 `json:"application_id"`
 }
+
+type channelType int
+
+const (
+	GuildTextChannel = iota
+	DMChannel
+	GuildVoiceChannel
+	GroupDMChannel
+	GuildCategoryChannel
+)
 
 type Message struct {
 	ID              string        `json:"id"`
@@ -45,11 +59,25 @@ type Message struct {
 	MentionRoles    []string      `json:"mention_roles"`
 	Attachments     []*Attachment `json:"attachments"`
 	Embeds          []*Embed      `json:"embeds"`
-	Reactions       []*Reaction   `json:"reactions"`
-	Nonce           string        `json:"nonce"`
+	Reactions       *[]*Reaction  `json:"reactions"`
+	Nonce           *string       `json:"nonce"`
 	Pinned          bool          `json:"pinned"`
-	WebhookID       string        `json:"webhook_id"`
+	WebhookID       *string       `json:"webhook_id"`
+	Type            messageType   `json:"type"`
 }
+
+type messageType int
+
+const (
+	DefaultMessage = iota
+	RecipientAdd
+	RecipientRemove
+	Call
+	ChannelNameChange
+	ChannelIconChange
+	ChannelPinnedMessage
+	GuildMemberJoin
+)
 
 type Reaction struct {
 	Count int            `json:"count"`
