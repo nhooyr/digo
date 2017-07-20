@@ -10,3 +10,11 @@ func TestGatewayEndpoint_Get(t *testing.T) {
 	}
 	t.Log(url)
 }
+
+func TestConn_Connect(t *testing.T) {
+	c := NewConn(c)
+	err := c.Connect()
+	if err != nil {
+		t.Fatal(err)
+	}
+}

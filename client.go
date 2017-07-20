@@ -25,8 +25,8 @@ type Client struct {
 	e  *endpoint
 }
 
-const discordAPIVersion = "6"
-const endpointAPI = "https://discordapp.com/api/v" + discordAPIVersion
+const apiVersion = "6"
+const endpointAPI = "https://discordapp.com/api/v" + apiVersion
 
 func NewClient() *Client {
 	c := &Client{
