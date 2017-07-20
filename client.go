@@ -46,7 +46,7 @@ func (c *Client) newRequest(method, url string, body io.Reader) *http.Request {
 	if err != nil {
 		panic(err)
 	}
-	req.Header.Set("Authorization", c.Token)
+	req.Header.Set("Authorization", "Bot "+c.Token)
 	req.Header.Set("User-Agent", c.UserAgent)
 	return req
 }

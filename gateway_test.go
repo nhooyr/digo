@@ -14,8 +14,11 @@ func EndpointTestGateway_Get(t *testing.T) {
 }
 
 func TestConn_Connect(t *testing.T) {
-	c := NewConn(c)
-	err := c.Connect()
+	c, err := NewConn(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = c.Dial()
 	if err != nil {
 		t.Fatal(err)
 	}

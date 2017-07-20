@@ -11,7 +11,7 @@ var c *Client
 func init() {
 	c = NewClient()
 	// TODO maybe make it all a simple struct like acme's autocert manager but that's so magical :(
-	c.Token = "Bot " + os.Getenv("DISCORD_TOKEN")
+	c.Token = os.Getenv("DISCORD_TOKEN")
 }
 
 func TestClient_APIError(t *testing.T) {

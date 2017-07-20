@@ -18,16 +18,16 @@ type Game struct {
 	URL  *string `json:"url"`
 }
 
-type Endpointgateway struct {
+type endpointGateway struct {
 	*endpoint
 }
 
-func (c *Client) gateway() Endpointgateway {
+func (c *Client) gateway() endpointGateway {
 	e2 := c.e.appendMajor("gateway")
-	return Endpointgateway{e2}
+	return endpointGateway{e2}
 }
 
-func (g Endpointgateway) get() (url string, err error) {
+func (g endpointGateway) get() (url string, err error) {
 	var urlStruct struct {
 		URL string `json:"url"`
 	}
@@ -35,30 +35,38 @@ func (g Endpointgateway) get() (url string, err error) {
 }
 
 type Conn struct {
-	apiClient  *Client
+	token      string
+	userAgent  string
 	gatewayURL string
-	sessionID  string
 
-	closeOnce         sync.Once
-	closeChan         chan struct{}
-	confirmClosedChan chan struct{}
+	sessionID string
+
+	closeOnce           sync.Once
+	closeChan           chan struct{}
+	closeConfirmChannel chan struct{}
 
 	wsConn *websocket.Conn
 
 	mu                    sync.Mutex
 	heartbeatAcknowledged bool
-	sequenceNumber        *int
+	sequenceNumber        int
 }
 
-func NewConn(apiClient *Client) *Conn {
-	return &Conn{
-		apiClient:         apiClient,
-		confirmClosedChan: make(chan struct{}, 2),
+func NewConn(apiClient *Client) (*Conn, error) {
+	gatewayURL, err := apiClient.gateway().get()
+	if err != nil {
+		return nil, err
 	}
+	gatewayURL += "?v=" + apiVersion + "&encoding=json"
+	return &Conn{
+		token:      apiClient.Token,
+		userAgent:  apiClient.UserAgent,
+		gatewayURL: gatewayURL,
+	}, nil
 }
 
 const (
-	dispatchOperation = iota
+	dispatchOperation            = iota
 	heartbeatOperation
 	identifyOperation
 	statusUpdateOperation
@@ -72,22 +80,38 @@ const (
 	heartbeatACKOperation
 )
 
-func (c *Conn) Close() (err error) {
-	c.confirmClosedChan <- struct{}{}
-	c.closeOnce.Do(func() {
-		close(c.closeChan)
-		closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "")
-		err = c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
-		err2 := c.wsConn.Close()
-		if err == nil {
-			err = err2
-		}
+func (c *Conn) close() error {
+	close(c.closeChan)
+	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
+	err := c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
+	err2 := c.wsConn.Close()
+	if err != nil {
+		return err
+	}
+	return err2
+}
 
-		// For heartbeat goroutine and eventLoop goroutine
-		<-c.confirmClosedChan
-		<-c.confirmClosedChan
-	})
+func (c *Conn) Close() error {
+	err := c.close()
+	// Wait for eventloop and heartbeat goroutines.
+	<-c.closeConfirmChannel
+	<-c.closeConfirmChannel
 	return err
+}
+
+func (c *Conn) reconnect() {
+	c.closeOnce.Do(func() {
+		err := c.close()
+		if err != nil {
+			log.Print(err)
+		}
+		// Wait for eventloop or heartbeat goroutine.
+		<-c.closeConfirmChannel
+		err = c.Dial()
+		if err != nil {
+			log.Print(err)
+		}
+	})
 }
 
 type helloOPData struct {
@@ -95,19 +119,12 @@ type helloOPData struct {
 	Trace             []string `json:"_trace"`
 }
 
-func (c *Conn) Connect() (err error) {
+func (c *Conn) Dial() (err error) {
 	c.heartbeatAcknowledged = true
 
 	c.closeOnce = sync.Once{}
 	c.closeChan = make(chan struct{})
-
-	if c.gatewayURL == "" {
-		c.gatewayURL, err = c.apiClient.gateway().get()
-		if err != nil {
-			return err
-		}
-		c.gatewayURL += "?v=" + apiVersion + "&encoding=json"
-	}
+	c.closeConfirmChannel = make(chan struct{})
 
 	c.wsConn, _, err = websocket.DefaultDialer.Dial(c.gatewayURL, nil)
 	if err != nil {
@@ -119,7 +136,6 @@ func (c *Conn) Connect() (err error) {
 	} else {
 		err = c.resume()
 	}
-
 	if err != nil {
 		return err
 	}
@@ -140,14 +156,12 @@ func (c *Conn) resume() error {
 	p := &sendPayload{
 		Operation: resumeOperation,
 		Data: resumeOPData{
-			Token:     c.apiClient.Token,
+			Token:     c.token,
 			SessionID: c.sessionID,
-			Seq:       *c.sequenceNumber,
+			Seq:       c.sequenceNumber,
 		},
 	}
 	c.mu.Unlock()
-	b, _ := json.MarshalIndent(p, "", "  ")
-	log.Printf("%s", b)
 	return c.wsConn.WriteJSON(p)
 }
 
@@ -163,51 +177,58 @@ func (c *Conn) eventLoop() {
 	for {
 		p, err := c.nextPayload()
 		if err != nil {
-			_ = c.Close()
+			select {
+			case <-c.closeChan:
+				c.closeConfirmChannel <- struct{}{}
+			default:
+				// TODO use sync.Once to prevent race condition?
+				c.reconnect()
+			}
 			return
 		}
 
-		if p.SequenceNumber != nil {
+		switch p.Operation {
+		case helloOperation:
+			var hello helloOPData
+			err = json.Unmarshal(p.Data, &hello)
+			if err != nil {
+				err = c.close()
+				if err != nil {
+					log.Print(err)
+				}
+				return
+			}
+			go c.heartbeat(&hello)
+		case heartbeatACKOperation:
+			c.mu.Lock()
+			c.heartbeatAcknowledged = true
+			c.mu.Unlock()
+		case invalidSessionOperation:
+			// TODO only once do this or sleep too? not sure, confusing docs
+			err := c.identify()
+			if err != nil {
+				log.Print(err)
+				continue
+			}
+		case dispatchOperation:
 			c.mu.Lock()
 			c.sequenceNumber = p.SequenceNumber
 			c.mu.Unlock()
-		}
 
-		switch p.Operation {
-		case dispatchOperation:
 			switch p.Type {
 			case "READY":
 				var ready readyEvent
-				err := json.Unmarshal(p.Data, &ready)
+				err = json.Unmarshal(p.Data, &ready)
 				if err != nil {
-					_ = c.Close()
+					err = c.close()
+					if err != nil {
+						log.Print(err)
+					}
 					return
 				}
 				c.sessionID = ready.SessionID
 			}
 			// TODO state tracking
-		case helloOperation:
-			var hello helloOPData
-			err = json.Unmarshal(p.Data, &hello)
-			if err != nil {
-				_ = c.Close()
-				// Log errors?
-				return
-			}
-			hello.HeartbeatInterval = 3000
-			c.heartbeatAcknowledged = false
-			go c.heartbeat(&hello)
-		case heartbeatACKOperation:
-			c.mu.Lock()
-			// TODO change back
-			c.heartbeatAcknowledged = false
-			c.mu.Unlock()
-		case invalidSessionOperation:
-			err := c.identify()
-			if err != nil {
-				_ = c.Close()
-				return
-			}
 		}
 		log.Print(p.Operation)
 		log.Print(p.Type)
@@ -236,10 +257,10 @@ func (c *Conn) identify() error {
 	p := &sendPayload{
 		Operation: identifyOperation,
 		Data: identifyOPData{
-			Token: c.apiClient.Token,
+			Token: c.token,
 			Properties: identifyProperties{
 				OS:      runtime.GOOS,
-				Browser: c.apiClient.UserAgent,
+				Browser: c.userAgent,
 			},
 			// TODO COMPRESS!!!
 			Compress:       false,
@@ -256,34 +277,27 @@ func (c *Conn) heartbeat(hello *helloOPData) {
 		select {
 		case <-ticker.C:
 		case <-c.closeChan:
+			c.closeConfirmChannel <- struct{}{}
 			return
 		}
 		c.mu.Lock()
 		if !c.heartbeatAcknowledged {
 			c.mu.Unlock()
-			_ = c.Close()
-			// TODO log error if unsuccessful connect/close
-			log.Print("type something quick")
-			time.Sleep(time.Second * 5)
-			err := c.Connect()
-			log.Print(err)
+			c.reconnect()
 			return
 		}
-		// TODO maybe loadint64?
-		var sequenceNumberCopy *int
-		// TODO use > 0 instead of pointer
-		if c.sequenceNumber != nil {
-			tmpCp := *c.sequenceNumber
-			sequenceNumberCopy = &tmpCp
-		}
-		c.heartbeatAcknowledged = true
+		sequenceNumber := c.sequenceNumber
+		c.heartbeatAcknowledged = false
 		c.mu.Unlock()
 
-		p := &sendPayload{Operation: heartbeatOperation, Data: sequenceNumberCopy}
+		p := &sendPayload{Operation: heartbeatOperation, Data: sequenceNumber}
 		err := c.wsConn.WriteJSON(p)
 		if err != nil {
-			// Log error? from close?
-			_ = c.Close()
+			log.Print(err)
+			err = c.close()
+			if err != nil {
+				log.Print(err)
+			}
 			return
 		}
 	}
@@ -292,13 +306,13 @@ func (c *Conn) heartbeat(hello *helloOPData) {
 type sendPayload struct {
 	Operation int         `json:"op"`
 	Data      interface{} `json:"d,omitempty"`
-	Sequence  *int        `json:"s,omitempty"`
+	Sequence  int         `json:"s,omitempty"`
 }
 
 type receivePayload struct {
 	Operation      int             `json:"op"`
 	Data           json.RawMessage `json:"d"`
-	SequenceNumber *int            `json:"s"`
+	SequenceNumber int             `json:"s"`
 	Type           string          `json:"t"`
 }
 
