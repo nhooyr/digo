@@ -13,6 +13,8 @@ import (
 
 	"strings"
 
+	"io"
+
 	"github.com/gorilla/websocket"
 	"github.com/nhooyr/log"
 )
@@ -40,6 +42,7 @@ func (g endpointGateway) get() (url string, err error) {
 }
 
 type Conn struct {
+	// TODO use apiClient because it will need to be in the context for eventHandlers
 	token      string
 	userAgent  string
 	gatewayURL string
@@ -183,11 +186,13 @@ func (c *Conn) readPayload() (*receivePayload, error) {
 	}
 	switch msgType {
 	case websocket.BinaryMessage:
-		r, err = zlib.NewReader(r)
+		var z io.ReadCloser
+		z, err = zlib.NewReader(r)
 		if err != nil {
 			return nil, err
 		}
-		fallthrough
+		defer z.Close()
+		return &p, json.NewDecoder(z).Decode(&p)
 	case websocket.TextMessage:
 		return &p, json.NewDecoder(r).Decode(&p)
 	default:
@@ -248,6 +253,7 @@ func (c *Conn) onPayload(p *receivePayload) error {
 		c.mu.Unlock()
 	case invalidSessionOperation:
 		// Wait out the possible rate limit.
+		// TODO Need to have a max limit on this, only one time imo.
 		time.Sleep(time.Second * 5)
 		err := c.identify()
 		if err != nil {
@@ -260,7 +266,23 @@ func (c *Conn) onPayload(p *receivePayload) error {
 		c.sequenceNumber = p.SequenceNumber
 		c.mu.Unlock()
 
-		go c.onEvent(p)
+		// TODO onEvent stuff
+		switch p.Type {
+		case "READY":
+			var ready readyEvent
+			err := json.Unmarshal(p.Data, &ready)
+			if err != nil {
+				log.Printf("closing connection due to invalid ready; %v", err)
+				err := c.Close()
+				if err != nil {
+					log.Print(err)
+				}
+			}
+			c.sessionID = ready.SessionID
+		case "RESUMED":
+		default:
+			log.Print("unknown dispatch payload type")
+		}
 	default:
 		panic("discord gone crazy; unexpected operation type")
 	}
@@ -272,23 +294,6 @@ func (c *Conn) onPayload(p *receivePayload) error {
 	log.Printf("%s", p.Data)
 	log.Print()
 	return nil
-}
-
-func (c *Conn) onEvent(p *receivePayload) {
-	switch p.Type {
-	case "READY":
-		var ready readyEvent
-		err := json.Unmarshal(p.Data, &ready)
-		if err != nil {
-			log.Printf("closing connection due to invalid ready; %v", err)
-			err := c.Close()
-			if err != nil {
-				log.Print(err)
-			}
-			return
-		}
-		c.sessionID = ready.SessionID
-	}
 }
 
 func (c *Conn) manager(heartbeatInterval int) {
@@ -329,6 +334,7 @@ func (c *Conn) manager(heartbeatInterval int) {
 				log.Print(err)
 			}
 			<-c.waitReadLoopClosed
+
 			c.waitClosed <- struct{}{}
 			return
 		}
@@ -373,7 +379,6 @@ func (c *Conn) identify() error {
 				OS:      runtime.GOOS,
 				Browser: c.userAgent,
 			},
-			// TODO COMPRESS!!!
 			Compress:       true,
 			LargeThreshold: 250,
 		},
