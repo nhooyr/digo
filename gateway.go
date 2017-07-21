@@ -8,6 +8,10 @@ import (
 
 	"runtime"
 
+	"errors"
+	"net"
+	"os"
+
 	"github.com/gorilla/websocket"
 	"github.com/nhooyr/log"
 )
@@ -41,9 +45,9 @@ type Conn struct {
 
 	sessionID string
 
-	closeOnce           sync.Once
-	closeChan           chan struct{}
-	closeConfirmChannel chan struct{}
+	closeChan         chan struct{}
+	confirmClosedChan chan struct{}
+	reconnectChan     chan struct{}
 
 	wsConn *websocket.Conn
 
@@ -59,9 +63,11 @@ func NewConn(apiClient *Client) (*Conn, error) {
 	}
 	gatewayURL += "?v=" + apiVersion + "&encoding=json"
 	return &Conn{
-		token:      apiClient.Token,
-		userAgent:  apiClient.UserAgent,
-		gatewayURL: gatewayURL,
+		token:             apiClient.Token,
+		userAgent:         apiClient.UserAgent,
+		gatewayURL:        gatewayURL,
+		confirmClosedChan: make(chan struct{}),
+		reconnectChan:     make(chan struct{}),
 	}, nil
 }
 
@@ -81,7 +87,6 @@ const (
 )
 
 func (c *Conn) close() error {
-	close(c.closeChan)
 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
 	err := c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
 	err2 := c.wsConn.Close()
@@ -92,26 +97,11 @@ func (c *Conn) close() error {
 }
 
 func (c *Conn) Close() error {
+	close(c.closeChan)
 	err := c.close()
-	// Wait for eventloop and heartbeat goroutines.
-	<-c.closeConfirmChannel
-	<-c.closeConfirmChannel
+	<-c.confirmClosedChan
+	<-c.confirmClosedChan
 	return err
-}
-
-func (c *Conn) reconnect() {
-	c.closeOnce.Do(func() {
-		err := c.close()
-		if err != nil {
-			log.Print(err)
-		}
-		// Wait for eventloop or heartbeat goroutine.
-		<-c.closeConfirmChannel
-		err = c.Dial()
-		if err != nil {
-			log.Print(err)
-		}
-	})
 }
 
 type helloOPData struct {
@@ -122,10 +112,10 @@ type helloOPData struct {
 func (c *Conn) Dial() (err error) {
 	c.heartbeatAcknowledged = true
 
-	c.closeOnce = sync.Once{}
 	c.closeChan = make(chan struct{})
-	c.closeConfirmChannel = make(chan struct{})
 
+	// TODO Need to set read deadline for hello packet and I also need to set write deadlines.
+	// TODO also max message
 	c.wsConn, _, err = websocket.DefaultDialer.Dial(c.gatewayURL, nil)
 	if err != nil {
 		return err
@@ -140,7 +130,7 @@ func (c *Conn) Dial() (err error) {
 		return err
 	}
 
-	go c.eventLoop()
+	go c.readLoop()
 
 	return nil
 }
@@ -173,69 +163,141 @@ type readyEvent struct {
 	Trace           []string   `json:"_trace"`
 }
 
-func (c *Conn) eventLoop() {
+type receivePayload struct {
+	Operation      int             `json:"op"`
+	Data           json.RawMessage `json:"d"`
+	SequenceNumber int             `json:"s"`
+	Type           string          `json:"t"`
+}
+
+func (c *Conn) nextPayload() (*receivePayload, error) {
+	var p receivePayload
+	// TODO compression, see how discordgo does it
+	err := c.wsConn.ReadJSON(&p)
+	return &p, err
+}
+
+func (c *Conn) readLoop() {
 	for {
+		// TODO somehow reuse payload
 		p, err := c.nextPayload()
 		if err != nil {
-			select {
-			case <-c.closeChan:
-				c.closeConfirmChannel <- struct{}{}
-			default:
-				// TODO use sync.Once to prevent race condition?
-				c.reconnect()
+			if err, ok := err.(net.OpError); ok && err.Err == os.ErrClosed {
+				c.confirmClosedChan <- struct{}{}
+			} else {
+				log.Print(err)
+				c.reconnectChan <- struct{}{}
 			}
 			return
 		}
+		c.onEvent(p)
+	}
+}
 
-		switch p.Operation {
-		case helloOperation:
-			var hello helloOPData
-			err = json.Unmarshal(p.Data, &hello)
+type sendPayload struct {
+	Operation int         `json:"op"`
+	Data      interface{} `json:"d,omitempty"`
+	Sequence  int         `json:"s,omitempty"`
+}
+
+func (c *Conn) onEvent(p *receivePayload) error {
+	switch p.Operation {
+	case helloOperation:
+		var hello helloOPData
+		err := json.Unmarshal(p.Data, &hello)
+		if err != nil {
+			return err
+		}
+		go c.eventLoop(hello.HeartbeatInterval)
+	case heartbeatACKOperation:
+		c.mu.Lock()
+		c.heartbeatAcknowledged = true
+		c.mu.Unlock()
+	case invalidSessionOperation:
+		// TODO only once do this or sleep too? not sure, confusing docs
+		err := c.identify()
+		if err != nil {
+			return err
+		}
+	case dispatchOperation:
+		c.mu.Lock()
+		c.sequenceNumber = p.SequenceNumber
+		c.mu.Unlock()
+
+		switch p.Type {
+		case "READY":
+			var ready readyEvent
+			err := json.Unmarshal(p.Data, &ready)
 			if err != nil {
-				err = c.close()
+				return err
+			}
+			c.sessionID = ready.SessionID
+		}
+		// TODO state tracking
+	default:
+		panic("discord gone crazy")
+	}
+	return nil
+}
+
+func (c *Conn) eventLoop(heartbeatInterval int) {
+	ticker := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			err := c.heartbeat()
+			if err != nil {
+				log.Print(err)
+				err := c.close()
+				if err != nil {
+					log.Print(err)
+				}
+
+				// Wait for readLoop to exit.
+				// It's possible that it is trying to reconnect so receive on that channel too.
+				select {
+				case <-c.confirmClosedChan:
+				case <-c.reconnectChan:
+				}
+
+
+				err = c.Dial()
 				if err != nil {
 					log.Print(err)
 				}
 				return
 			}
-			go c.heartbeat(&hello)
-		case heartbeatACKOperation:
-			c.mu.Lock()
-			c.heartbeatAcknowledged = true
-			c.mu.Unlock()
-		case invalidSessionOperation:
-			// TODO only once do this or sleep too? not sure, confusing docs
-			err := c.identify()
+		case <-c.reconnectChan:
+			err := c.close()
 			if err != nil {
 				log.Print(err)
-				continue
 			}
-		case dispatchOperation:
-			c.mu.Lock()
-			c.sequenceNumber = p.SequenceNumber
-			c.mu.Unlock()
 
-			switch p.Type {
-			case "READY":
-				var ready readyEvent
-				err = json.Unmarshal(p.Data, &ready)
-				if err != nil {
-					err = c.close()
-					if err != nil {
-						log.Print(err)
-					}
-					return
-				}
-				c.sessionID = ready.SessionID
+			err = c.Dial()
+			if err != nil {
+				log.Print(err)
 			}
-			// TODO state tracking
+			return
+		case <-c.closeChan:
+			c.confirmClosedChan <- struct{}{}
+			return
 		}
-		log.Print(p.Operation)
-		log.Print(p.Type)
-		log.Printf("%s", p.Data)
-		log.Print(p.SequenceNumber)
-		log.Print()
 	}
+}
+
+func (c *Conn) heartbeat() error {
+	c.mu.Lock()
+	if !c.heartbeatAcknowledged {
+		c.mu.Unlock()
+		return errors.New("heartbeat not acknowledged")
+	}
+	sequenceNumber := c.sequenceNumber
+	c.heartbeatAcknowledged = false
+	c.mu.Unlock()
+
+	p := &sendPayload{Operation: heartbeatOperation, Data: sequenceNumber}
+	return c.wsConn.WriteJSON(p)
 }
 
 type identifyOPData struct {
@@ -268,57 +330,4 @@ func (c *Conn) identify() error {
 		},
 	}
 	return c.wsConn.WriteJSON(p)
-}
-
-func (c *Conn) heartbeat(hello *helloOPData) {
-	ticker := time.NewTicker(time.Duration(hello.HeartbeatInterval) * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-		case <-c.closeChan:
-			c.closeConfirmChannel <- struct{}{}
-			return
-		}
-		c.mu.Lock()
-		if !c.heartbeatAcknowledged {
-			c.mu.Unlock()
-			c.reconnect()
-			return
-		}
-		sequenceNumber := c.sequenceNumber
-		c.heartbeatAcknowledged = false
-		c.mu.Unlock()
-
-		p := &sendPayload{Operation: heartbeatOperation, Data: sequenceNumber}
-		err := c.wsConn.WriteJSON(p)
-		if err != nil {
-			log.Print(err)
-			err = c.close()
-			if err != nil {
-				log.Print(err)
-			}
-			return
-		}
-	}
-}
-
-type sendPayload struct {
-	Operation int         `json:"op"`
-	Data      interface{} `json:"d,omitempty"`
-	Sequence  int         `json:"s,omitempty"`
-}
-
-type receivePayload struct {
-	Operation      int             `json:"op"`
-	Data           json.RawMessage `json:"d"`
-	SequenceNumber int             `json:"s"`
-	Type           string          `json:"t"`
-}
-
-func (c *Conn) nextPayload() (*receivePayload, error) {
-	var p receivePayload
-	// TODO compression, see how discordgo does it
-	err := c.wsConn.ReadJSON(&p)
-	return &p, err
 }
