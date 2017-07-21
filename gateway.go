@@ -91,6 +91,7 @@ const (
 )
 
 func (c *Conn) close() error {
+	// TODO I think this should be OK, but I'm not sure. Should there be a writerLoop routine to sync writes?
 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
 	err := c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
 	err2 := c.wsConn.Close()
@@ -201,7 +202,7 @@ func (c *Conn) readLoop() {
 			} else {
 				log.Print(err)
 				// It's possible we're being shutdown right now too.
-				// Or maybe eventLoop is already trying to reconnect.
+				// Or maybe manager is already trying to reconnect.
 				select {
 				case c.reconnectChan <- struct{}{}:
 				case c.waitReadLoopClosed <- struct{}{}:
@@ -209,7 +210,16 @@ func (c *Conn) readLoop() {
 			}
 			return
 		}
-		c.onEvent(p)
+		err = c.onPayload(p)
+		if err != nil {
+			log.Print(err)
+			// It's possible we're being shutdown right now too.
+			// Or maybe manager is already trying to reconnect.
+			select {
+			case c.reconnectChan <- struct{}{}:
+			case c.waitReadLoopClosed <- struct{}{}:
+			}
+		}
 	}
 }
 
@@ -219,7 +229,7 @@ type sendPayload struct {
 	Sequence  int         `json:"s,omitempty"`
 }
 
-func (c *Conn) onEvent(p *receivePayload) error {
+func (c *Conn) onPayload(p *receivePayload) error {
 	switch p.Operation {
 	case helloOperation:
 		var hello helloOPData
@@ -227,34 +237,26 @@ func (c *Conn) onEvent(p *receivePayload) error {
 		if err != nil {
 			return err
 		}
-		go c.eventLoop(hello.HeartbeatInterval)
+		go c.manager(hello.HeartbeatInterval)
 	case heartbeatACKOperation:
 		c.mu.Lock()
 		c.heartbeatAcknowledged = true
 		c.mu.Unlock()
 	case invalidSessionOperation:
-		// TODO only once do this or sleep too? not sure, confusing docs, also there is the resume d
+		// Wait out the possible rate limit.
+		time.Sleep(time.Second * 5)
 		err := c.identify()
 		if err != nil {
 			return err
 		}
+	case reconnectOperation:
+		return errors.New("reconnect operation")
 	case dispatchOperation:
 		c.mu.Lock()
 		c.sequenceNumber = p.SequenceNumber
 		c.mu.Unlock()
 
-		// TODO run rest in a new goroutine!!!
-
-		switch p.Type {
-		case "READY":
-			var ready readyEvent
-			err := json.Unmarshal(p.Data, &ready)
-			if err != nil {
-				return err
-			}
-			c.sessionID = ready.SessionID
-		}
-		// TODO state tracking
+		go c.onEvent(p)
 	default:
 		panic("discord gone crazy; unexpected operation type")
 	}
@@ -268,13 +270,20 @@ func (c *Conn) onEvent(p *receivePayload) error {
 	return nil
 }
 
-func (c *Conn) reconnect() error {
-
-
-	return c.Dial()
+func (c *Conn) onEvent(p *receivePayload) {
+	switch p.Type {
+	case "READY":
+		var ready readyEvent
+		err := json.Unmarshal(p.Data, &ready)
+		if err != nil {
+			log.Print(err)
+		}
+		c.sessionID = ready.SessionID
+	}
+	// TODO state tracking
 }
 
-func (c *Conn) eventLoop(heartbeatInterval int) {
+func (c *Conn) manager(heartbeatInterval int) {
 	ticker := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
 	defer ticker.Stop()
 	for {
