@@ -46,8 +46,10 @@ type Conn struct {
 
 	sessionID string
 
-	closeChan          chan struct{}
-	waitClosed         chan struct{}
+	closeChan  chan struct{}
+	closeOnce  sync.Once
+	waitClosed chan struct{}
+
 	waitReadLoopClosed chan struct{}
 	reconnectChan      chan struct{}
 
@@ -76,7 +78,7 @@ func NewConn(apiClient *Client) (*Conn, error) {
 }
 
 const (
-	dispatchOperation = iota
+	dispatchOperation            = iota
 	heartbeatOperation
 	identifyOperation
 	statusUpdateOperation
@@ -102,8 +104,10 @@ func (c *Conn) close() error {
 }
 
 func (c *Conn) Close() error {
-	c.closeChan <- struct{}{}
-	<-c.waitClosed
+	c.closeOnce.Do(func() {
+		close(c.closeChan)
+		<-c.waitClosed
+	})
 	return nil
 }
 
@@ -276,11 +280,15 @@ func (c *Conn) onEvent(p *receivePayload) {
 		var ready readyEvent
 		err := json.Unmarshal(p.Data, &ready)
 		if err != nil {
-			log.Print(err)
+			log.Printf("closing connection due to invalid ready; %v", err)
+			err := c.Close()
+			if err != nil {
+				log.Print(err)
+			}
+			return
 		}
 		c.sessionID = ready.SessionID
 	}
-	// TODO state tracking
 }
 
 func (c *Conn) manager(heartbeatInterval int) {
