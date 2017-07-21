@@ -76,7 +76,7 @@ func NewConn(apiClient *Client) (*Conn, error) {
 }
 
 const (
-	dispatchOperation            = iota
+	dispatchOperation = iota
 	heartbeatOperation
 	identifyOperation
 	statusUpdateOperation
