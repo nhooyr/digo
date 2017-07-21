@@ -49,12 +49,11 @@ type Conn struct {
 
 	sessionID string
 
-	closeChan  chan struct{}
-	closeOnce  sync.Once
-	waitClosed chan struct{}
+	closeChan chan struct{}
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 
-	waitReadLoopClosed chan struct{}
-	reconnectChan      chan struct{}
+	reconnectChan chan struct{}
 
 	wsConn *websocket.Conn
 
@@ -70,29 +69,27 @@ func NewConn(apiClient *Client) (*Conn, error) {
 	}
 	gatewayURL += "?v=" + apiVersion + "&encoding=json"
 	return &Conn{
-		token:              apiClient.Token,
-		userAgent:          apiClient.UserAgent,
-		gatewayURL:         gatewayURL,
-		closeChan:          make(chan struct{}),
-		waitClosed:         make(chan struct{}),
-		waitReadLoopClosed: make(chan struct{}),
-		reconnectChan:      make(chan struct{}),
+		token:         apiClient.Token,
+		userAgent:     apiClient.UserAgent,
+		gatewayURL:    gatewayURL,
+		closeChan:     make(chan struct{}),
+		reconnectChan: make(chan struct{}),
 	}, nil
 }
 
 const (
-	dispatchOperation = iota
-	heartbeatOperation
-	identifyOperation
-	statusUpdateOperation
-	voiceStateUpdateOperation
-	voiceServerPingOperation
-	resumeOperation
-	reconnectOperation
-	requestGuildMembersOperation
-	invalidSessionOperation
-	helloOperation
-	heartbeatACKOperation
+	operationDispatch            = iota
+	operationHeartbeat
+	operationIdentify
+	operationStatusUpdate
+	operationVoiceStateUpdate
+	operationVoiceServerPing
+	operationResume
+	operationReconnect
+	operationRequestGuildMembers
+	operationInvalidSession
+	operationHello
+	operationHeartbeatACK
 )
 
 func (c *Conn) close() error {
@@ -109,12 +106,12 @@ func (c *Conn) close() error {
 func (c *Conn) Close() error {
 	c.closeOnce.Do(func() {
 		close(c.closeChan)
-		<-c.waitClosed
+		c.wg.Wait()
 	})
 	return nil
 }
 
-type helloOPData struct {
+type dataOPHello struct {
 	HeartbeatInterval int      `json:"heartbeat_interval"`
 	Trace             []string `json:"_trace"`
 }
@@ -138,12 +135,12 @@ func (c *Conn) Dial() (err error) {
 		return err
 	}
 
-	go c.readLoop()
+	c.runWorker(c.readLoop)
 
 	return nil
 }
 
-type resumeOPData struct {
+type dataOPResume struct {
 	Token     string `json:"token"`
 	SessionID string `json:"session_id"`
 	Seq       int    `json:"seq"`
@@ -151,9 +148,9 @@ type resumeOPData struct {
 
 func (c *Conn) resume() error {
 	c.mu.Lock()
-	p := &sendPayload{
-		Operation: resumeOperation,
-		Data: resumeOPData{
+	p := &payloadSend{
+		Operation: operationResume,
+		Data: dataOPResume{
 			Token:     c.token,
 			SessionID: c.sessionID,
 			Seq:       c.sequenceNumber,
@@ -163,7 +160,7 @@ func (c *Conn) resume() error {
 	return c.wsConn.WriteJSON(p)
 }
 
-type readyEvent struct {
+type eventReady struct {
 	V               int        `json:"v"`
 	User            *User      `json:"user"`
 	PrivateChannels []*Channel `json:"private_channels"`
@@ -171,15 +168,15 @@ type readyEvent struct {
 	Trace           []string   `json:"_trace"`
 }
 
-type receivePayload struct {
+type payloadReceive struct {
 	Operation      int             `json:"op"`
 	Data           json.RawMessage `json:"d"`
 	SequenceNumber int             `json:"s"`
 	Type           string          `json:"t"`
 }
 
-func (c *Conn) readPayload() (*receivePayload, error) {
-	var p receivePayload
+func (c *Conn) readPayload() (*payloadReceive, error) {
+	var p payloadReceive
 	msgType, r, err := c.wsConn.NextReader()
 	if err != nil {
 		return nil, err
@@ -201,20 +198,26 @@ func (c *Conn) readPayload() (*receivePayload, error) {
 	return &p, err
 }
 
+func (c *Conn) runWorker(fn func()) {
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		fn()
+	}()
+}
+
 func (c *Conn) readLoop() {
 	for {
 		p, err := c.readPayload()
 		if err != nil {
 			errStr := err.Error()
-			if strings.Contains(errStr, "use of closed network connection") {
-				c.waitReadLoopClosed <- struct{}{}
-			} else {
+			if !strings.Contains(errStr, "use of closed network connection") {
 				log.Print(err)
 				// It's possible we're being shutdown right now too.
 				// Or maybe manager is already trying to reconnect.
 				select {
 				case c.reconnectChan <- struct{}{}:
-				case c.waitReadLoopClosed <- struct{}{}:
+				case <-c.closeChan:
 				}
 			}
 			return
@@ -222,36 +225,36 @@ func (c *Conn) readLoop() {
 		err = c.onPayload(p)
 		if err != nil {
 			log.Print(err)
-			// It's possible we're being shutdown right now too.
+			// It's possible we're being shutdown right now.
 			// Or maybe manager is already trying to reconnect.
 			select {
 			case c.reconnectChan <- struct{}{}:
-			case c.waitReadLoopClosed <- struct{}{}:
+			case <-c.closeChan:
 			}
 		}
 	}
 }
 
-type sendPayload struct {
+type payloadSend struct {
 	Operation int         `json:"op"`
 	Data      interface{} `json:"d,omitempty"`
 	Sequence  int         `json:"s,omitempty"`
 }
 
-func (c *Conn) onPayload(p *receivePayload) error {
+func (c *Conn) onPayload(p *payloadReceive) error {
 	switch p.Operation {
-	case helloOperation:
-		var hello helloOPData
+	case operationHello:
+		var hello dataOPHello
 		err := json.Unmarshal(p.Data, &hello)
 		if err != nil {
 			return err
 		}
 		go c.manager(hello.HeartbeatInterval)
-	case heartbeatACKOperation:
+	case operationHeartbeatACK:
 		c.mu.Lock()
 		c.heartbeatAcknowledged = true
 		c.mu.Unlock()
-	case invalidSessionOperation:
+	case operationInvalidSession:
 		// Wait out the possible rate limit.
 		// TODO Need to have a max limit on this, only one time imo.
 		time.Sleep(time.Second * 5)
@@ -259,24 +262,21 @@ func (c *Conn) onPayload(p *receivePayload) error {
 		if err != nil {
 			return err
 		}
-	case reconnectOperation:
+	case operationReconnect:
 		return errors.New("reconnect operation")
-	case dispatchOperation:
+	case operationDispatch:
 		c.mu.Lock()
 		c.sequenceNumber = p.SequenceNumber
 		c.mu.Unlock()
 
 		// TODO onEvent stuff
+		// TODO close connection if anything goes wrong.
 		switch p.Type {
 		case "READY":
-			var ready readyEvent
+			var ready eventReady
 			err := json.Unmarshal(p.Data, &ready)
 			if err != nil {
-				log.Printf("closing connection due to invalid ready; %v", err)
-				err := c.Close()
-				if err != nil {
-					log.Print(err)
-				}
+				return err
 			}
 			c.sessionID = ready.SessionID
 		case "RESUMED":
@@ -309,7 +309,7 @@ func (c *Conn) manager(heartbeatInterval int) {
 				if err != nil {
 					log.Print(err)
 				}
-				<-c.waitReadLoopClosed
+				<-c.reconnectChan
 
 				err = c.Dial()
 				if err != nil {
@@ -333,9 +333,6 @@ func (c *Conn) manager(heartbeatInterval int) {
 			if err != nil {
 				log.Print(err)
 			}
-			<-c.waitReadLoopClosed
-
-			c.waitClosed <- struct{}{}
 			return
 		}
 	}
@@ -351,11 +348,11 @@ func (c *Conn) heartbeat() error {
 	c.heartbeatAcknowledged = false
 	c.mu.Unlock()
 
-	p := &sendPayload{Operation: heartbeatOperation, Data: sequenceNumber}
+	p := &payloadSend{Operation: operationHeartbeat, Data: sequenceNumber}
 	return c.wsConn.WriteJSON(p)
 }
 
-type identifyOPData struct {
+type dataOPIdentify struct {
 	Token          string             `json:"token"`
 	Properties     identifyProperties `json:"properties"`
 	Compress       bool               `json:"compress"`
@@ -363,17 +360,15 @@ type identifyOPData struct {
 }
 
 type identifyProperties struct {
-	OS              string `json:"$os,omitempty"`
-	Browser         string `json:"$browser,omitempty"`
-	Device          string `json:"$device,omitempty"`
-	Referrer        string `json:"$referrer,omitempty"`
-	ReferringDomain string `json:"$referring_domain,omitempty"`
+	OS      string `json:"$os,omitempty"`
+	Browser string `json:"$browser,omitempty"`
+	Device  string `json:"$device,omitempty"`
 }
 
 func (c *Conn) identify() error {
-	p := &sendPayload{
-		Operation: identifyOperation,
-		Data: identifyOPData{
+	p := &payloadSend{
+		Operation: operationIdentify,
+		Data: dataOPIdentify{
 			Token: c.token,
 			Properties: identifyProperties{
 				OS:      runtime.GOOS,
