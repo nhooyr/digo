@@ -1,4 +1,4 @@
-package discgo_test
+package discgo
 
 import "testing"
 

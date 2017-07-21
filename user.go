@@ -32,57 +32,57 @@ type Connection struct {
 	Integrations []*Integration `json:"integrations"`
 }
 
-type UserEndpoint struct {
+type EndpointUser struct {
 	*endpoint
 }
 
-func (c *Client) User(uID string) UserEndpoint {
+func (c *Client) User(uID string) EndpointUser {
 	e2 := c.e.appendMajor("users").appendMinor(uID)
-	return UserEndpoint{e2}
+	return EndpointUser{e2}
 }
 
-func (e UserEndpoint) Get() (u *User, err error) {
+func (e EndpointUser) Get() (u *User, err error) {
 	return u, e.doMethod("GET", nil, &u)
 }
 
-type MeEndpoint struct {
+type EndpointMe struct {
 	*endpoint
 }
 
-func (c *Client) Me() MeEndpoint {
+func (c *Client) Me() EndpointMe {
 	e2 := c.User("@me").endpoint
-	return MeEndpoint{e2}
+	return EndpointMe{e2}
 }
 
-func (e MeEndpoint) Get() (u *User, err error) {
+func (e EndpointMe) Get() (u *User, err error) {
 	return u, e.doMethod("GET", nil, &u)
 }
 
-type MeModifyParams struct {
+type ParamsMeModify struct {
 	Username string `json:"username"`
 	Avatar   string `json:"avatar"`
 }
 
-func (e MeEndpoint) Modify(params *MeModifyParams) (u *User, err error) {
+func (e EndpointMe) Modify(params *ParamsMeModify) (u *User, err error) {
 	return u, e.doMethod("PATCH", params, &u)
 }
 
-type MeGuildsEndpoint struct {
+type EndpointMeGuilds struct {
 	*endpoint
 }
 
-func (e MeEndpoint) Guilds() MeGuildsEndpoint {
+func (e EndpointMe) Guilds() EndpointMeGuilds {
 	e2 := e.appendMajor("guilds")
-	return MeGuildsEndpoint{e2}
+	return EndpointMeGuilds{e2}
 }
 
-type MeGuildsGetParams struct {
+type ParamsMeGuildsGet struct {
 	BeforeID string
 	AfterID  string
 	Limit    int
 }
 
-func (params *MeGuildsGetParams) rawQuery() string {
+func (params *ParamsMeGuildsGet) rawQuery() string {
 	v := url.Values{}
 	if params.BeforeID != "" {
 		v.Set("before", params.BeforeID)
@@ -96,7 +96,7 @@ func (params *MeGuildsGetParams) rawQuery() string {
 	return v.Encode()
 }
 
-func (e MeGuildsEndpoint) Get(params *MeGuildsGetParams) (guilds []*UserGuild, err error) {
+func (e EndpointMeGuilds) Get(params *ParamsMeGuildsGet) (guilds []*UserGuild, err error) {
 	req := e.newRequest("GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
@@ -104,58 +104,58 @@ func (e MeGuildsEndpoint) Get(params *MeGuildsGetParams) (guilds []*UserGuild, e
 	return guilds, e.do(req, &guilds)
 }
 
-type MeGuildEndpoint struct {
+type EndpointMeGuild struct {
 	*endpoint
 }
 
-func (e MeEndpoint) Guild(gID string) MeGuildEndpoint {
+func (e EndpointMe) Guild(gID string) EndpointMeGuild {
 	e2 := e.Guilds().appendMajor(gID)
-	return MeGuildEndpoint{e2}
+	return EndpointMeGuild{e2}
 }
 
-func (e MeGuildEndpoint) Leave() error {
+func (e EndpointMeGuild) Leave() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-type MeDMChannelsEndpoint struct {
+type EndpointMeDMChannels struct {
 	*endpoint
 }
 
-func (e MeEndpoint) DMChannels() MeDMChannelsEndpoint {
+func (e EndpointMe) DMChannels() EndpointMeDMChannels {
 	e2 := e.appendMajor("channels")
-	return MeDMChannelsEndpoint{e2}
+	return EndpointMeDMChannels{e2}
 }
 
-func (e MeDMChannelsEndpoint) Get() (dmChannels *[]Channel, err error) {
+func (e EndpointMeDMChannels) Get() (dmChannels *[]Channel, err error) {
 	return dmChannels, e.doMethod("GET", nil, &dmChannels)
 }
 
-type DMChannelsCreateParams struct {
+type ParamsDMChannelsCreate struct {
 	RecipientID string `json:"recipient_id"`
 }
 
-func (e MeDMChannelsEndpoint) Create(params *DMChannelsCreateParams) (ch *Channel, err error) {
+func (e EndpointMeDMChannels) Create(params *ParamsDMChannelsCreate) (ch *Channel, err error) {
 	return ch, e.doMethod("POST", params, &ch)
 }
 
-type DmChannelsCreateGroupParams struct {
+type ParamsDmChannelsCreateGroup struct {
 	AccessTokens []string          `json:"access_tokens"`
 	Nicks        map[string]string `json:"nicks"`
 }
 
-func (e MeDMChannelsEndpoint) CreateGroup(params *DmChannelsCreateGroupParams) (ch *Channel, err error) {
+func (e EndpointMeDMChannels) CreateGroup(params *ParamsDmChannelsCreateGroup) (ch *Channel, err error) {
 	return ch, e.doMethod("POST", params, &ch)
 }
 
-type MeConnectionsEndpoint struct {
+type EndpointMeConnections struct {
 	*endpoint
 }
 
-func (e MeEndpoint) Connections() MeConnectionsEndpoint {
+func (e EndpointMe) Connections() EndpointMeConnections {
 	e2 := e.appendMajor("connections")
-	return MeConnectionsEndpoint{e2}
+	return EndpointMeConnections{e2}
 }
 
-func (e MeConnectionsEndpoint) Get() (connections []*Connection, err error) {
+func (e EndpointMeConnections) Get() (connections []*Connection, err error) {
 	return connections, e.doMethod("GET", nil, &connections)
 }

@@ -25,7 +25,8 @@ type Client struct {
 	e  *endpoint
 }
 
-const endpointAPI = "https://discordapp.com/api"
+const apiVersion = "6"
+const endpointAPI = "https://discordapp.com/api/v" + apiVersion
 
 func NewClient() *Client {
 	c := &Client{
@@ -45,7 +46,7 @@ func (c *Client) newRequest(method, url string, body io.Reader) *http.Request {
 	if err != nil {
 		panic(err)
 	}
-	req.Header.Set("Authorization", c.Token)
+	req.Header.Set("Authorization", "Bot "+c.Token)
 	req.Header.Set("User-Agent", c.UserAgent)
 	return req
 }
@@ -54,6 +55,7 @@ func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
 	return c.doN(req, rateLimitPath, 0)
 }
 
+// TODO should it be the library's purpose to retry?
 func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
 	prl := c.rl.getPathRateLimiter(rateLimitPath)
 	prl.lock()
