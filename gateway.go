@@ -222,6 +222,15 @@ func (c *Conn) readLoop() {
 			}
 			return
 		}
+
+		log.Print(p.Operation)
+		if p.Type != "" {
+			log.Print(p.Type)
+		}
+		log.Print(p.SequenceNumber)
+		log.Printf("%s", p.Data)
+		log.Print()
+
 		err = c.onPayload(p)
 		if err != nil {
 			log.Print(err)
@@ -249,7 +258,9 @@ func (c *Conn) onPayload(p *payloadReceive) error {
 		if err != nil {
 			return err
 		}
-		go c.manager(hello.HeartbeatInterval)
+		c.runWorker(func() {
+			c.manager(hello.HeartbeatInterval)
+		})
 	case operationHeartbeatACK:
 		c.mu.Lock()
 		c.heartbeatAcknowledged = true
@@ -286,13 +297,6 @@ func (c *Conn) onPayload(p *payloadReceive) error {
 	default:
 		panic("discord gone crazy; unexpected operation type")
 	}
-	log.Print(p.Operation)
-	if p.Type != "" {
-		log.Print(p.Type)
-	}
-	log.Print(p.SequenceNumber)
-	log.Printf("%s", p.Data)
-	log.Print()
 	return nil
 }
 
@@ -309,7 +313,7 @@ func (c *Conn) manager(heartbeatInterval int) {
 				if err != nil {
 					log.Print(err)
 				}
-				<-c.reconnectChan
+				c.wg.Wait()
 
 				err = c.Dial()
 				if err != nil {
