@@ -8,9 +8,10 @@ import (
 
 	"runtime"
 
+	"compress/zlib"
 	"errors"
-	"net"
-	"os"
+
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/nhooyr/log"
@@ -45,9 +46,10 @@ type Conn struct {
 
 	sessionID string
 
-	closeChan         chan struct{}
-	confirmClosedChan chan struct{}
-	reconnectChan     chan struct{}
+	closeChan          chan struct{}
+	waitClosed         chan struct{}
+	waitReadLoopClosed chan struct{}
+	reconnectChan      chan struct{}
 
 	wsConn *websocket.Conn
 
@@ -63,11 +65,13 @@ func NewConn(apiClient *Client) (*Conn, error) {
 	}
 	gatewayURL += "?v=" + apiVersion + "&encoding=json"
 	return &Conn{
-		token:             apiClient.Token,
-		userAgent:         apiClient.UserAgent,
-		gatewayURL:        gatewayURL,
-		confirmClosedChan: make(chan struct{}),
-		reconnectChan:     make(chan struct{}),
+		token:              apiClient.Token,
+		userAgent:          apiClient.UserAgent,
+		gatewayURL:         gatewayURL,
+		closeChan:          make(chan struct{}),
+		waitClosed:         make(chan struct{}),
+		waitReadLoopClosed: make(chan struct{}),
+		reconnectChan:      make(chan struct{}),
 	}, nil
 }
 
@@ -97,11 +101,9 @@ func (c *Conn) close() error {
 }
 
 func (c *Conn) Close() error {
-	close(c.closeChan)
-	err := c.close()
-	<-c.confirmClosedChan
-	<-c.confirmClosedChan
-	return err
+	c.closeChan <- struct{}{}
+	<-c.waitClosed
+	return nil
 }
 
 type helloOPData struct {
@@ -111,8 +113,6 @@ type helloOPData struct {
 
 func (c *Conn) Dial() (err error) {
 	c.heartbeatAcknowledged = true
-
-	c.closeChan = make(chan struct{})
 
 	// TODO Need to set read deadline for hello packet and I also need to set write deadlines.
 	// TODO also max message
@@ -170,23 +170,42 @@ type receivePayload struct {
 	Type           string          `json:"t"`
 }
 
-func (c *Conn) nextPayload() (*receivePayload, error) {
+func (c *Conn) readPayload() (*receivePayload, error) {
 	var p receivePayload
-	// TODO compression, see how discordgo does it
-	err := c.wsConn.ReadJSON(&p)
+	msgType, r, err := c.wsConn.NextReader()
+	if err != nil {
+		return nil, err
+	}
+	switch msgType {
+	case websocket.BinaryMessage:
+		r, err = zlib.NewReader(r)
+		if err != nil {
+			return nil, err
+		}
+		fallthrough
+	case websocket.TextMessage:
+		return &p, json.NewDecoder(r).Decode(&p)
+	default:
+		return nil, errors.New("unexpected websocket message type")
+	}
 	return &p, err
 }
 
 func (c *Conn) readLoop() {
 	for {
-		// TODO somehow reuse payload
-		p, err := c.nextPayload()
+		p, err := c.readPayload()
 		if err != nil {
-			if err, ok := err.(net.OpError); ok && err.Err == os.ErrClosed {
-				c.confirmClosedChan <- struct{}{}
+			errStr := err.Error()
+			if strings.Contains(errStr, "use of closed network connection") {
+				c.waitReadLoopClosed <- struct{}{}
 			} else {
 				log.Print(err)
-				c.reconnectChan <- struct{}{}
+				// It's possible we're being shutdown right now too.
+				// Or maybe eventLoop is already trying to reconnect.
+				select {
+				case c.reconnectChan <- struct{}{}:
+				case c.waitReadLoopClosed <- struct{}{}:
+				}
 			}
 			return
 		}
@@ -214,7 +233,7 @@ func (c *Conn) onEvent(p *receivePayload) error {
 		c.heartbeatAcknowledged = true
 		c.mu.Unlock()
 	case invalidSessionOperation:
-		// TODO only once do this or sleep too? not sure, confusing docs
+		// TODO only once do this or sleep too? not sure, confusing docs, also there is the resume d
 		err := c.identify()
 		if err != nil {
 			return err
@@ -223,6 +242,8 @@ func (c *Conn) onEvent(p *receivePayload) error {
 		c.mu.Lock()
 		c.sequenceNumber = p.SequenceNumber
 		c.mu.Unlock()
+
+		// TODO run rest in a new goroutine!!!
 
 		switch p.Type {
 		case "READY":
@@ -235,9 +256,22 @@ func (c *Conn) onEvent(p *receivePayload) error {
 		}
 		// TODO state tracking
 	default:
-		panic("discord gone crazy")
+		panic("discord gone crazy; unexpected operation type")
 	}
+	log.Print(p.Operation)
+	if p.Type != "" {
+		log.Print(p.Type)
+	}
+	log.Print(p.SequenceNumber)
+	log.Printf("%s", p.Data)
+	log.Print()
 	return nil
+}
+
+func (c *Conn) reconnect() error {
+
+
+	return c.Dial()
 }
 
 func (c *Conn) eventLoop(heartbeatInterval int) {
@@ -253,14 +287,7 @@ func (c *Conn) eventLoop(heartbeatInterval int) {
 				if err != nil {
 					log.Print(err)
 				}
-
-				// Wait for readLoop to exit.
-				// It's possible that it is trying to reconnect so receive on that channel too.
-				select {
-				case <-c.confirmClosedChan:
-				case <-c.reconnectChan:
-				}
-
+				<-c.waitReadLoopClosed
 
 				err = c.Dial()
 				if err != nil {
@@ -280,7 +307,12 @@ func (c *Conn) eventLoop(heartbeatInterval int) {
 			}
 			return
 		case <-c.closeChan:
-			c.confirmClosedChan <- struct{}{}
+			err := c.close()
+			if err != nil {
+				log.Print(err)
+			}
+			<-c.waitReadLoopClosed
+			c.waitClosed <- struct{}{}
 			return
 		}
 	}
@@ -325,7 +357,7 @@ func (c *Conn) identify() error {
 				Browser: c.userAgent,
 			},
 			// TODO COMPRESS!!!
-			Compress:       false,
+			Compress:       true,
 			LargeThreshold: 250,
 		},
 	}
