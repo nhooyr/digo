@@ -1,19 +1,16 @@
 package discgo
 
 import (
+	"compress/zlib"
 	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"runtime"
+	"sync"
 	"time"
 
-	"sync"
-
-	"runtime"
-
-	"compress/zlib"
-	"errors"
-
-	"strings"
-
-	"io"
+	"context"
 
 	"github.com/gorilla/websocket"
 	"github.com/nhooyr/log"
@@ -41,6 +38,7 @@ func (g endpointGateway) get() (url string, err error) {
 	return urlStruct.URL, g.doMethod("GET", nil, &urlStruct)
 }
 
+// TODO need separate heartbeat goroutine so that i can always close. e.g. before hello received
 type Conn struct {
 	// TODO use apiClient because it will need to be in the context for eventHandlers
 	token      string
@@ -49,9 +47,10 @@ type Conn struct {
 
 	sessionID string
 
-	closeChan chan struct{}
-	closeOnce sync.Once
-	wg        sync.WaitGroup
+	ctx        context.Context
+	cancelFn   func()
+	wg         sync.WaitGroup
+	waitClosed chan struct{}
 
 	reconnectChan chan struct{}
 
@@ -68,11 +67,14 @@ func NewConn(apiClient *Client) (*Conn, error) {
 		return nil, err
 	}
 	gatewayURL += "?v=" + apiVersion + "&encoding=json"
+	ctx, cancelFn := context.WithCancel(context.Background())
 	return &Conn{
 		token:         apiClient.Token,
 		userAgent:     apiClient.UserAgent,
 		gatewayURL:    gatewayURL,
-		closeChan:     make(chan struct{}),
+		ctx:           ctx,
+		cancelFn:      cancelFn,
+		waitClosed:    make(chan struct{}),
 		reconnectChan: make(chan struct{}),
 	}, nil
 }
@@ -104,18 +106,17 @@ func (c *Conn) close() error {
 }
 
 func (c *Conn) Close() error {
-	c.closeOnce.Do(func() {
-		close(c.closeChan)
-		c.wg.Wait()
-	})
+	c.cancelFn()
+	<-c.waitClosed
 	return nil
 }
 
-type dataOPHello struct {
+type dataOpHello struct {
 	HeartbeatInterval int      `json:"heartbeat_interval"`
 	Trace             []string `json:"_trace"`
 }
 
+// TODO maybe take context.Context? though I doubt it's necessary
 func (c *Conn) Dial() (err error) {
 	c.heartbeatAcknowledged = true
 
@@ -135,12 +136,12 @@ func (c *Conn) Dial() (err error) {
 		return err
 	}
 
-	c.runWorker(c.readLoop)
+	go c.manager()
 
 	return nil
 }
 
-type dataOPResume struct {
+type dataOpResume struct {
 	Token     string `json:"token"`
 	SessionID string `json:"session_id"`
 	Seq       int    `json:"seq"`
@@ -150,7 +151,7 @@ func (c *Conn) resume() error {
 	c.mu.Lock()
 	p := &payloadSend{
 		Operation: operationResume,
-		Data: dataOPResume{
+		Data: dataOpResume{
 			Token:     c.token,
 			SessionID: c.sessionID,
 			Seq:       c.sequenceNumber,
@@ -206,18 +207,17 @@ func (c *Conn) runWorker(fn func()) {
 	}()
 }
 
-func (c *Conn) readLoop() {
+func (c *Conn) readLoop(ctx context.Context) {
 	for {
 		p, err := c.readPayload()
 		if err != nil {
-			errStr := err.Error()
-			if !strings.Contains(errStr, "use of closed network connection") {
+			if !isUseOfClosedError(err) {
 				log.Print(err)
 				// It's possible we're being shutdown right now too.
 				// Or maybe manager is already trying to reconnect.
 				select {
 				case c.reconnectChan <- struct{}{}:
-				case <-c.closeChan:
+				case <-ctx.Done():
 				}
 			}
 			return
@@ -231,17 +231,29 @@ func (c *Conn) readLoop() {
 		log.Printf("%s", p.Data)
 		log.Print()
 
-		err = c.onPayload(p)
+		err = c.onPayload(ctx, p)
 		if err != nil {
 			log.Print(err)
 			// It's possible we're being shutdown right now.
 			// Or maybe manager is already trying to reconnect.
 			select {
 			case c.reconnectChan <- struct{}{}:
-			case <-c.closeChan:
+			case <-ctx.Done():
 			}
 		}
 	}
+}
+
+// TODO not sure if this is how I should do it
+func isUseOfClosedError(err error) bool {
+	opErr, ok := err.(*net.OpError)
+	if !ok {
+		return false
+	}
+	if opErr.Err.Error() == "use of closed network connection" {
+		return true
+	}
+	return false
 }
 
 type payloadSend struct {
@@ -250,16 +262,16 @@ type payloadSend struct {
 	Sequence  int         `json:"s,omitempty"`
 }
 
-func (c *Conn) onPayload(p *payloadReceive) error {
+func (c *Conn) onPayload(ctx context.Context, p *payloadReceive) error {
 	switch p.Operation {
 	case operationHello:
-		var hello dataOPHello
+		var hello dataOpHello
 		err := json.Unmarshal(p.Data, &hello)
 		if err != nil {
 			return err
 		}
 		c.runWorker(func() {
-			c.manager(hello.HeartbeatInterval)
+			c.heartbeatLoop(ctx, hello.HeartbeatInterval)
 		})
 	case operationHeartbeatACK:
 		c.mu.Lock()
@@ -300,7 +312,35 @@ func (c *Conn) onPayload(p *payloadReceive) error {
 	return nil
 }
 
-func (c *Conn) manager(heartbeatInterval int) {
+func (c *Conn) manager() {
+	ctx, cancelFn := context.WithCancel(c.ctx)
+	c.runWorker(func() {
+		c.readLoop(ctx)
+	})
+	select {
+	case <-c.reconnectChan:
+		cancelFn()
+		err := c.close()
+		if err != nil {
+			log.Print(err)
+		}
+		c.wg.Wait()
+
+		err = c.Dial()
+		if err != nil {
+			log.Print(err)
+		}
+	case <-ctx.Done():
+		err := c.close()
+		if err != nil {
+			log.Print(err)
+		}
+		c.wg.Wait()
+		c.waitClosed <- struct{}{}
+	}
+}
+
+func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
 	ticker := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -309,34 +349,13 @@ func (c *Conn) manager(heartbeatInterval int) {
 			err := c.heartbeat()
 			if err != nil {
 				log.Print(err)
-				err := c.close()
-				if err != nil {
-					log.Print(err)
+				// Either we signal a reconnect or we have been signalled to close.
+				select {
+				case c.reconnectChan <- struct{}{}:
+				case <-ctx.Done():
 				}
-				c.wg.Wait()
-
-				err = c.Dial()
-				if err != nil {
-					log.Print(err)
-				}
-				return
 			}
-		case <-c.reconnectChan:
-			err := c.close()
-			if err != nil {
-				log.Print(err)
-			}
-
-			err = c.Dial()
-			if err != nil {
-				log.Print(err)
-			}
-			return
-		case <-c.closeChan:
-			err := c.close()
-			if err != nil {
-				log.Print(err)
-			}
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -356,7 +375,7 @@ func (c *Conn) heartbeat() error {
 	return c.wsConn.WriteJSON(p)
 }
 
-type dataOPIdentify struct {
+type dataOpIdentify struct {
 	Token          string             `json:"token"`
 	Properties     identifyProperties `json:"properties"`
 	Compress       bool               `json:"compress"`
@@ -372,7 +391,7 @@ type identifyProperties struct {
 func (c *Conn) identify() error {
 	p := &payloadSend{
 		Operation: operationIdentify,
-		Data: dataOPIdentify{
+		Data: dataOpIdentify{
 			Token: c.token,
 			Properties: identifyProperties{
 				OS:      runtime.GOOS,
