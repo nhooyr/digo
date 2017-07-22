@@ -38,7 +38,6 @@ func (g endpointGateway) get() (url string, err error) {
 	return urlStruct.URL, g.doMethod("GET", nil, &urlStruct)
 }
 
-// TODO need separate heartbeat goroutine so that i can always close. e.g. before hello received
 type Conn struct {
 	// TODO use apiClient because it will need to be in the context for eventHandlers
 	token      string
@@ -47,8 +46,7 @@ type Conn struct {
 
 	sessionID string
 
-	ctx        context.Context
-	cancelFn   func()
+	closeChan chan struct{}
 	wg         sync.WaitGroup
 	waitClosed chan struct{}
 
@@ -67,20 +65,18 @@ func NewConn(apiClient *Client) (*Conn, error) {
 		return nil, err
 	}
 	gatewayURL += "?v=" + apiVersion + "&encoding=json"
-	ctx, cancelFn := context.WithCancel(context.Background())
 	return &Conn{
 		token:         apiClient.Token,
 		userAgent:     apiClient.UserAgent,
 		gatewayURL:    gatewayURL,
-		ctx:           ctx,
-		cancelFn:      cancelFn,
+		closeChan:     make(chan struct{}),
 		waitClosed:    make(chan struct{}),
 		reconnectChan: make(chan struct{}),
 	}, nil
 }
 
 const (
-	operationDispatch            = iota
+	operationDispatch = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -106,7 +102,7 @@ func (c *Conn) close() error {
 }
 
 func (c *Conn) Close() error {
-	c.cancelFn()
+	c.closeChan <- struct{}{}
 	<-c.waitClosed
 	return nil
 }
@@ -313,7 +309,7 @@ func (c *Conn) onPayload(ctx context.Context, p *payloadReceive) error {
 }
 
 func (c *Conn) manager() {
-	ctx, cancelFn := context.WithCancel(c.ctx)
+	ctx, cancelFn := context.WithCancel(context.Background())
 	c.runWorker(func() {
 		c.readLoop(ctx)
 	})
@@ -330,7 +326,8 @@ func (c *Conn) manager() {
 		if err != nil {
 			log.Print(err)
 		}
-	case <-ctx.Done():
+	case <-c.closeChan:
+		cancelFn()
 		err := c.close()
 		if err != nil {
 			log.Print(err)
@@ -349,11 +346,12 @@ func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
 			err := c.heartbeat()
 			if err != nil {
 				log.Print(err)
-				// Either we signal a reconnect or we have been signalled to close.
+				// Either we signal a reconnect or we have been signaled to close.
 				select {
 				case c.reconnectChan <- struct{}{}:
 				case <-ctx.Done():
 				}
+				return
 			}
 		case <-ctx.Done():
 			return
