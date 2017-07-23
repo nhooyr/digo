@@ -33,8 +33,11 @@ func (g endpointGateway) get() (url string, err error) {
 }
 
 type Conn struct {
-	Client     *Client
-	gatewayURL string
+	Client           *Client
+	EventMux         eventMux
+
+	internalEventMux eventMux
+	gatewayURL       string
 
 	sessionID string
 
@@ -51,9 +54,14 @@ type Conn struct {
 }
 
 func NewConn() *Conn {
+	internalEventMux := newEventMux()
+	internalEventMux.Register(func(ctx context.Context, conn *Conn, e *eventReady) {
+		conn.sessionID = e.SessionID
+	})
 	return &Conn{
-		closeChan:     make(chan struct{}),
-		reconnectChan: make(chan struct{}),
+		internalEventMux: internalEventMux,
+		closeChan:        make(chan struct{}),
+		reconnectChan:    make(chan struct{}),
 	}
 }
 
@@ -91,7 +99,7 @@ func (c *Conn) Dial() (err error) {
 }
 
 const (
-	operationDispatch = iota
+	operationDispatch            = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -311,18 +319,9 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 		c.sequenceNumber = p.SequenceNumber
 		c.mu.Unlock()
 
-		// TODO onEvent stuff
-		switch p.Type {
-		case "READY":
-			var ready eventReady
-			err := json.Unmarshal(p.Data, &ready)
-			if err != nil {
-				return err
-			}
-			c.sessionID = ready.SessionID
-		case "RESUMED":
-		default:
-			log.Printf("unknown dispatch payload type %s", p.Type)
+		err := c.internalEventMux.route(ctx, c, p, true)
+		if err != nil {
+			return err
 		}
 	default:
 		panic("discord gone crazy; unexpected operation type")
