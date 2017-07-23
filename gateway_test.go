@@ -5,7 +5,7 @@ import (
 )
 
 func EndpointTestGateway_Get(t *testing.T) {
-	e := c.gateway()
+	e := client.gateway()
 	url, err := e.get()
 	if err != nil {
 		t.Fatal(err)
@@ -14,11 +14,9 @@ func EndpointTestGateway_Get(t *testing.T) {
 }
 
 func TestConn_Connect(t *testing.T) {
-	c, err := NewConn(c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = c.Dial()
+	conn := NewConn()
+	conn.Client = client
+	err := conn.Dial()
 	if err != nil {
 		t.Fatal(err)
 	}
