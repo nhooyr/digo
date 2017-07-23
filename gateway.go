@@ -33,8 +33,8 @@ func (g endpointGateway) get() (url string, err error) {
 }
 
 type Conn struct {
-	Client           *Client
-	EventMux         eventMux
+	Client   *Client
+	EventMux eventMux
 
 	internalEventMux eventMux
 	gatewayURL       string
@@ -60,6 +60,7 @@ func NewConn() *Conn {
 	})
 	return &Conn{
 		internalEventMux: internalEventMux,
+		EventMux:         newEventMux(),
 		closeChan:        make(chan struct{}),
 		reconnectChan:    make(chan struct{}),
 	}
@@ -99,7 +100,7 @@ func (c *Conn) Dial() (err error) {
 }
 
 const (
-	operationDispatch            = iota
+	operationDispatch = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate

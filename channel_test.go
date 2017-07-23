@@ -31,13 +31,13 @@ func TestClient_CreateMessage(t *testing.T) {
 
 	params := &ParamsMessageCreate{
 		Content: "boar",
-		File: &File{
+		File: &ParamsFile{
 			Name:    "screenshot.png",
 			Content: f,
 		},
-		Embed: &Embed{
+		Embed: &ModelEmbed{
 			Description: "heads",
-			Image: &EmbedImage{
+			Image: &ModelEmbedImage{
 				URL: "attachment://screenshot.png",
 			},
 		},

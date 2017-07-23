@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-type User struct {
+type ModelUser struct {
 	ID            string `json:"id"`
 	Username      string `json:"username"`
 	Discriminator string `json:"discriminator"`
@@ -16,7 +16,7 @@ type User struct {
 	Email         string `json:"email"`
 }
 
-type UserGuild struct {
+type ModelUserGuild struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Icon        string `json:"icon"`
@@ -24,12 +24,12 @@ type UserGuild struct {
 	Permissions int    `json:"permissions"`
 }
 
-type Connection struct {
-	ID           string         `json:"id"`
-	Name         string         `json:"name"`
-	Types        string         `json:"types"`
-	Revoked      bool           `json:"revoked"`
-	Integrations []*Integration `json:"integrations"`
+type ModelConnection struct {
+	ID           string              `json:"id"`
+	Name         string              `json:"name"`
+	Types        string              `json:"types"`
+	Revoked      bool                `json:"revoked"`
+	Integrations []*ModelIntegration `json:"integrations"`
 }
 
 type EndpointUser struct {
@@ -41,7 +41,7 @@ func (c *Client) User(uID string) EndpointUser {
 	return EndpointUser{e2}
 }
 
-func (e EndpointUser) Get() (u *User, err error) {
+func (e EndpointUser) Get() (u *ModelUser, err error) {
 	return u, e.doMethod("GET", nil, &u)
 }
 
@@ -54,7 +54,7 @@ func (c *Client) Me() EndpointMe {
 	return EndpointMe{e2}
 }
 
-func (e EndpointMe) Get() (u *User, err error) {
+func (e EndpointMe) Get() (u *ModelUser, err error) {
 	return u, e.doMethod("GET", nil, &u)
 }
 
@@ -63,7 +63,7 @@ type ParamsMeModify struct {
 	Avatar   string `json:"avatar"`
 }
 
-func (e EndpointMe) Modify(params *ParamsMeModify) (u *User, err error) {
+func (e EndpointMe) Modify(params *ParamsMeModify) (u *ModelUser, err error) {
 	return u, e.doMethod("PATCH", params, &u)
 }
 
@@ -96,7 +96,7 @@ func (params *ParamsMeGuildsGet) rawQuery() string {
 	return v.Encode()
 }
 
-func (e EndpointMeGuilds) Get(params *ParamsMeGuildsGet) (guilds []*UserGuild, err error) {
+func (e EndpointMeGuilds) Get(params *ParamsMeGuildsGet) (guilds []*ModelUserGuild, err error) {
 	req := e.newRequest("GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
@@ -126,7 +126,7 @@ func (e EndpointMe) DMChannels() EndpointMeDMChannels {
 	return EndpointMeDMChannels{e2}
 }
 
-func (e EndpointMeDMChannels) Get() (dmChannels *[]Channel, err error) {
+func (e EndpointMeDMChannels) Get() (dmChannels *[]ModelChannel, err error) {
 	return dmChannels, e.doMethod("GET", nil, &dmChannels)
 }
 
@@ -134,7 +134,7 @@ type ParamsDMChannelsCreate struct {
 	RecipientID string `json:"recipient_id"`
 }
 
-func (e EndpointMeDMChannels) Create(params *ParamsDMChannelsCreate) (ch *Channel, err error) {
+func (e EndpointMeDMChannels) Create(params *ParamsDMChannelsCreate) (ch *ModelChannel, err error) {
 	return ch, e.doMethod("POST", params, &ch)
 }
 
@@ -143,7 +143,7 @@ type ParamsDmChannelsCreateGroup struct {
 	Nicks        map[string]string `json:"nicks"`
 }
 
-func (e EndpointMeDMChannels) CreateGroup(params *ParamsDmChannelsCreateGroup) (ch *Channel, err error) {
+func (e EndpointMeDMChannels) CreateGroup(params *ParamsDmChannelsCreateGroup) (ch *ModelChannel, err error) {
 	return ch, e.doMethod("POST", params, &ch)
 }
 
@@ -156,6 +156,6 @@ func (e EndpointMe) Connections() EndpointMeConnections {
 	return EndpointMeConnections{e2}
 }
 
-func (e EndpointMeConnections) Get() (connections []*Connection, err error) {
+func (e EndpointMeConnections) Get() (connections []*ModelConnection, err error) {
 	return connections, e.doMethod("GET", nil, &connections)
 }

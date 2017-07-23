@@ -7,7 +7,6 @@ TODO need context.Context on rest API methods?
 TODO does rest API even need to be exposed?
 TODO no race conditions in gateway.go and it implements everything correctly?
 TODO which events need to be public?
-TODO rename all structs to ModelX e.g. ModelChannel
 
 
 RestAPI does not use One Methods e.g. Channels().One(cID) because too much stutter.

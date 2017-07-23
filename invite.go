@@ -4,29 +4,29 @@ import (
 	"time"
 )
 
-type Invite struct {
-	Code    string         `json:"code"`
-	Guild   *InviteGuild   `json:"guild"`
-	Channel *InviteChannel `json:"channel"`
+type ModelInvite struct {
+	Code    string              `json:"code"`
+	Guild   *ModelInviteGuild   `json:"guild"`
+	Channel *ModelInviteChannel `json:"channel"`
 
 	// Invite metadata
-	Inviter   *User     `json:"inviter"`
-	Uses      int       `json:"uses"`
-	MaxUses   int       `json:"max_uses"`
-	MaxAge    int       `json:"max_age"`
-	Temporary bool      `json:"temporary"`
-	CreatedAt time.Time `json:"created_at"`
-	Revoked   bool      `json:"revoked"`
+	Inviter   *ModelUser `json:"inviter"`
+	Uses      int        `json:"uses"`
+	MaxUses   int        `json:"max_uses"`
+	MaxAge    int        `json:"max_age"`
+	Temporary bool       `json:"temporary"`
+	CreatedAt time.Time  `json:"created_at"`
+	Revoked   bool       `json:"revoked"`
 }
 
-type InviteGuild struct {
+type ModelInviteGuild struct {
 	ID     string  `json:"id"`
 	Name   string  `json:"name"`
 	Splash *string `json:"splash"`
 	Icon   *string `json:"icon"`
 }
 
-type InviteChannel struct {
+type ModelInviteChannel struct {
 	ID   string      `json:"id"`
 	Name string      `json:"name"`
 	Type channelType `json:"type"`
@@ -41,14 +41,14 @@ func (c *Client) Invite(inviteCode string) EndpointInvite {
 	return EndpointInvite{e2}
 }
 
-func (e EndpointInvite) Get() (inv *Invite, err error) {
+func (e EndpointInvite) Get() (inv *ModelInvite, err error) {
 	return inv, e.doMethod("GET", nil, &inv)
 }
 
-func (e EndpointInvite) Delete() (inv *Invite, err error) {
+func (e EndpointInvite) Delete() (inv *ModelInvite, err error) {
 	return inv, e.doMethod("DELETE", nil, &inv)
 }
 
-func (e EndpointInvite) Accept() (inv *Invite, err error) {
+func (e EndpointInvite) Accept() (inv *ModelInvite, err error) {
 	return inv, e.doMethod("POST", nil, &inv)
 }

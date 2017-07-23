@@ -7,11 +7,11 @@ import (
 )
 
 type eventReady struct {
-	V               int        `json:"v"`
-	User            *User      `json:"user"`
-	PrivateChannels []*Channel `json:"private_channels"`
-	SessionID       string     `json:"session_id"`
-	Trace           []string   `json:"_trace"`
+	V               int             `json:"v"`
+	User            *ModelUser      `json:"user"`
+	PrivateChannels []*ModelChannel `json:"private_channels"`
+	SessionID       string          `json:"session_id"`
+	Trace           []string        `json:"_trace"`
 }
 
 type eventResumed struct {
@@ -19,23 +19,23 @@ type eventResumed struct {
 }
 
 type EventChannelCreate struct {
-	Channel `json:"-"`
+	ModelChannel `json:"-"`
 }
 
 type EventChannelUpdate struct {
-	Channel `json:"-"`
+	ModelChannel `json:"-"`
 }
 
 type EventChannelDelete struct {
-	Channel `json:"-"`
+	ModelChannel `json:"-"`
 }
 
 type EventGuildCreate struct {
-	Guild `json:"-"`
+	ModelGuild `json:"-"`
 }
 
 type EventGuildUpdate struct {
-	Guild `json:"-"`
+	ModelGuild `json:"-"`
 }
 
 type EventGuildDelete struct {
@@ -44,18 +44,18 @@ type EventGuildDelete struct {
 }
 
 type EventGuildBanAdd struct {
-	User    `json:"-"`
-	GuildID string `json:"guild_id"`
+	ModelUser `json:"-"`
+	GuildID   string `json:"guild_id"`
 }
 
 type EventGuildBanRemove struct {
-	User    `json:"-"`
-	GuildID string `json:"guild_id"`
+	ModelUser `json:"-"`
+	GuildID   string `json:"guild_id"`
 }
 
 type EventGuildEmojisUpdate struct {
-	GuildID string        `json:"guild_id"`
-	Emojis  []*GuildEmoji `json:"emojis"`
+	GuildID string             `json:"guild_id"`
+	Emojis  []*ModelGuildEmoji `json:"emojis"`
 }
 
 type EventGuildIntegrationsUpdate struct {
@@ -67,44 +67,44 @@ type EventGuildMemberAdd struct {
 }
 
 type EventGuildMemberRemove struct {
-	User    *User  `json:"user"`
-	GuildID string `json:"guild_id"`
+	User    *ModelUser `json:"user"`
+	GuildID string     `json:"guild_id"`
 }
 
 type EventGuildMemberUpdate struct {
-	GuildID string   `json:"guild_id"`
-	Roles   []string `json:"roles"`
-	User    User     `json:"user"`
-	Nick    string   `json:"nick"`
+	GuildID string    `json:"guild_id"`
+	Roles   []string  `json:"roles"`
+	User    ModelUser `json:"user"`
+	Nick    string    `json:"nick"`
 }
 
 type EventGuildMembersChunk struct {
 	GuildID string
-	Members []*GuildMember
+	Members []*ModelGuildMember
 }
 
 type EventGuildRoleCreate struct {
-	GuildID string `json:"guild_id"`
-	Role    Role   `json:"role"`
+	GuildID string    `json:"guild_id"`
+	Role    ModelRole `json:"role"`
 }
 
 type EventGuildRoleUpdate struct {
-	GuildID string `json:"guild_id"`
-	Role    Role   `json:"role"`
+	GuildID string    `json:"guild_id"`
+	Role    ModelRole `json:"role"`
 }
 
 type EventGuildRoleDelete struct {
-	GuildID string `json:"guild_id"`
-	Role    Role   `json:"role"`
+	GuildID string    `json:"guild_id"`
+	Role    ModelRole `json:"role"`
 }
 
 type EventMessageCreate struct {
-	Message `json:"-"`
+	ModelMessage `json:"-"`
 }
 
 // May not be full message.
 type EventMessageUpdate struct {
-	Message `json:"-"`
+	ModelMessage `json:"-"`
 }
 
 type EventMessageDelete struct {
@@ -118,17 +118,17 @@ type EventMessageDeleteBulk struct {
 }
 
 type EventMessageReactionAdd struct {
-	UserID    string     `json:"user_id"`
-	ChannelID string     `json:"channel_id"`
-	MessageID string     `json:"message_id"`
-	Emoji     GuildEmoji `json:"emoji"`
+	UserID    string          `json:"user_id"`
+	ChannelID string          `json:"channel_id"`
+	MessageID string          `json:"message_id"`
+	Emoji     ModelGuildEmoji `json:"emoji"`
 }
 
 type EventMessageReactionRemove struct {
-	UserID    string      `json:"user_id"`
-	ChannelID string      `json:"channel_id"`
-	MessageID string      `json:"message_id"`
-	Emoji     GuildMember `json:"emoji"`
+	UserID    string           `json:"user_id"`
+	ChannelID string           `json:"channel_id"`
+	MessageID string           `json:"message_id"`
+	Emoji     ModelGuildMember `json:"emoji"`
 }
 
 type EventMessageReactionRemoveAll struct {
@@ -137,14 +137,14 @@ type EventMessageReactionRemoveAll struct {
 }
 
 type EventPresenceUpdate struct {
-	User    User     `json:"user"`
-	Roles   []string `json:"roles"`
-	Game    *Game    `json:"game"`
-	GuildID string   `json:"guild_id"`
-	Status  string   `json:"status"`
+	User    ModelUser  `json:"user"`
+	Roles   []string   `json:"roles"`
+	Game    *ModelGame `json:"game"`
+	GuildID string     `json:"guild_id"`
+	Status  string     `json:"status"`
 }
 
-type Game struct {
+type ModelGame struct {
 	Name string  `json:"name"`
 	Type *int    `json:"type"`
 	URL  *string `json:"url"`
@@ -168,11 +168,11 @@ type EventTypingStart struct {
 }
 
 type EventUserUpdate struct {
-	User `json:"-"`
+	ModelUser `json:"-"`
 }
 
 type EventVoiceStateUpdate struct {
-	VoiceState `json:"-"`
+	ModelVoiceState `json:"-"`
 }
 
 type eventVoiceServerUpdate struct {

@@ -1,6 +1,6 @@
 package discgo
 
-type VoiceState struct {
+type ModelVoiceState struct {
 	GuildID   *string `json:"guild_id"`
 	ChannelID string  `json:"channel_id"`
 	UserID    string  `json:"user_id"`
@@ -12,7 +12,7 @@ type VoiceState struct {
 	Suppress  bool    `json:"suppress"`
 }
 
-type VoiceRegion struct {
+type ModelVoiceRegion struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
 	SampleHostname string `json:"sample_hostname"`
@@ -32,6 +32,6 @@ func (c *Client) VoiceRegions() EndpointVoiceRegions {
 	return EndpointVoiceRegions{e2}
 }
 
-func (e EndpointVoiceRegions) Get() (voiceRegions []*VoiceRegion, err error) {
+func (e EndpointVoiceRegions) Get() (voiceRegions []*ModelVoiceRegion, err error) {
 	return voiceRegions, e.doMethod("GET", nil, &voiceRegions)
 }
