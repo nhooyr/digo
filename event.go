@@ -13,6 +13,10 @@ type eventReady struct {
 	Trace           []string   `json:"_trace"`
 }
 
+type eventResumed struct {
+	Trace []string `json:"_trace"`
+}
+
 type EventChannelCreate struct {
 	Channel `json:"-"`
 }
@@ -67,10 +71,10 @@ type EventGuildMemberRemove struct {
 }
 
 type EventGuildMemberUpdate struct {
-	GuildID string `json:"guild_id"`
+	GuildID string   `json:"guild_id"`
 	Roles   []string `json:"roles"`
-	User    User `json:"user"`
-	Nick    string `json:"nick"`
+	User    User     `json:"user"`
+	Nick    string   `json:"nick"`
 }
 
 type EventGuildMembersChunk struct {
@@ -80,17 +84,17 @@ type EventGuildMembersChunk struct {
 
 type EventGuildRoleCreate struct {
 	GuildID string `json:"guild_id"`
-	Role    Role `json:"role"`
+	Role    Role   `json:"role"`
 }
 
 type EventGuildRoleUpdate struct {
 	GuildID string `json:"guild_id"`
-	Role    Role `json:"role"`
+	Role    Role   `json:"role"`
 }
 
 type EventGuildRoleDelete struct {
 	GuildID string `json:"guild_id"`
-	Role    Role `json:"role"`
+	Role    Role   `json:"role"`
 }
 
 type EventMessageCreate struct {
@@ -104,25 +108,25 @@ type EventMessageUpdate struct {
 
 type EventMessageDelete struct {
 	ID        string `json:"id"`
-	ChannelID string  `json:"channel_id"`
+	ChannelID string `json:"channel_id"`
 }
 
 type EventMessageDeleteBulk struct {
 	IDs       []string `json:"ids"`
-	ChannelID string `json:"channel_id"`
+	ChannelID string   `json:"channel_id"`
 }
 
 type EventMessageReactionAdd struct {
-	UserID    string `json:"user_id"`
-	ChannelID string `json:"channel_id"`
-	MessageID string `json:"message_id"`
+	UserID    string     `json:"user_id"`
+	ChannelID string     `json:"channel_id"`
+	MessageID string     `json:"message_id"`
 	Emoji     GuildEmoji `json:"emoji"`
 }
 
 type EventMessageReactionRemove struct {
-	UserID    string `json:"user_id"`
-	ChannelID string `json:"channel_id"`
-	MessageID string `json:"message_id"`
+	UserID    string      `json:"user_id"`
+	ChannelID string      `json:"channel_id"`
+	MessageID string      `json:"message_id"`
 	Emoji     GuildMember `json:"emoji"`
 }
 
@@ -132,11 +136,11 @@ type EventMessageReactionRemoveAll struct {
 }
 
 type EventPresenceUpdate struct {
-	User    User `json:"user"`
+	User    User     `json:"user"`
 	Roles   []string `json:"roles"`
-	Game    *Game `json:"game"`
-	GuildID string `json:"guild_id"`
-	Status  string `json:"status"`
+	Game    *Game    `json:"game"`
+	GuildID string   `json:"guild_id"`
+	Status  string   `json:"status"`
 }
 
 type Game struct {
@@ -147,7 +151,7 @@ type Game struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	GameTypeGame      = iota
+	GameTypeGame = iota
 	GameTypeStreaming
 
 	StatusIdle    = "idle"
@@ -159,7 +163,7 @@ const (
 type EventTypingStart struct {
 	ChannelID string `json:"channel_id"`
 	UserID    string `json:"user_id"`
-	Timestamp int `json:"timestamp"`
+	Timestamp int    `json:"timestamp"`
 }
 
 type EventUserUpdate struct {
@@ -182,6 +186,66 @@ func (em eventMux) register(fn interface{}) {
 	switch fn.(type) {
 	case func(ctx context.Context, conn *Conn, e *eventReady):
 		em["READY"] = fn
+	case func(ctx context.Context, conn *Conn, e *eventResumed):
+		em["RESUMED"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventChannelCreate):
+		em["CHANNEL_CREATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventChannelUpdate):
+		em["CHANNEL_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventChannelDelete):
+		em["CHANNEL_DELETE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildCreate):
+		em["GUILD_CREATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildUpdate):
+		em["GUILD_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildDelete):
+		em["GUILD_DELETE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildBanAdd):
+		em["GUILD_BAN_ADD"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildBanRemove):
+		em["GUILD_BAN_REMOVE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildEmojisUpdate):
+		em["GUILD_EMOJIS_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildIntegrationsUpdate):
+		em["GUILD_INTEGRATIONS_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildMemberAdd):
+		em["GUILD_MEMBER_ADD"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildMemberRemove):
+		em["GUILD_MEMBER_REMOVE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildMemberUpdate):
+		em["GUILD_MEMBER_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildMembersChunk):
+		em["GUILD_MEMBERS_CHUNK"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildRoleCreate):
+		em["GUILD_ROLE_CREATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildRoleUpdate):
+		em["GUILD_ROLE_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventGuildRoleDelete):
+		em["GUILD_ROLE_DELETE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventMessageCreate):
+		em["MESSAGE_CREATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventMessageUpdate):
+		em["MESSAGE_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventMessageDelete):
+		em["MESSAGE_DELETE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventMessageDeleteBulk):
+		em["MESSAGE_DELETE_BULK"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventMessageReactionAdd):
+		em["MESSAGE_REACTION_ADD"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventMessageReactionRemove):
+		em["MESSAGE_REACTION_REMOVE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventMessageReactionRemoveAll):
+		em["MESSAGE_REACTION_REMOVE_ALL"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventPresenceUpdate):
+		em["PRESENCE_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventTypingStart):
+		em["TYPING_START"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventUserUpdate):
+		em["USER_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *EventVoiceStateUpdate):
+		em["VOICE_STATE_UPDATE"] = fn
+	case func(ctx context.Context, conn *Conn, e *eventVoiceServerUpdate):
+		em["VOICE_SERVER_UPDATE"] = fn
 	}
 }
 
