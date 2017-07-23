@@ -19,23 +19,23 @@ type eventResumed struct {
 }
 
 type EventChannelCreate struct {
-	ModelChannel `json:"-"`
+	ModelChannel
 }
 
 type EventChannelUpdate struct {
-	ModelChannel `json:"-"`
+	ModelChannel
 }
 
 type EventChannelDelete struct {
-	ModelChannel `json:"-"`
+	ModelChannel
 }
 
 type EventGuildCreate struct {
-	ModelGuild `json:"-"`
+	ModelGuild
 }
 
 type EventGuildUpdate struct {
-	ModelGuild `json:"-"`
+	ModelGuild
 }
 
 type EventGuildDelete struct {
@@ -44,13 +44,13 @@ type EventGuildDelete struct {
 }
 
 type EventGuildBanAdd struct {
-	ModelUser `json:"-"`
-	GuildID   string `json:"guild_id"`
+	ModelUser
+	GuildID string `json:"guild_id"`
 }
 
 type EventGuildBanRemove struct {
-	ModelUser `json:"-"`
-	GuildID   string `json:"guild_id"`
+	ModelUser
+	GuildID string `json:"guild_id"`
 }
 
 type EventGuildEmojisUpdate struct {
@@ -79,8 +79,8 @@ type EventGuildMemberUpdate struct {
 }
 
 type EventGuildMembersChunk struct {
-	GuildID string
-	Members []*ModelGuildMember
+	GuildID string `json:"guild_id"`
+	Members []*ModelGuildMember `json:"members"`
 }
 
 type EventGuildRoleCreate struct {
@@ -99,12 +99,12 @@ type EventGuildRoleDelete struct {
 }
 
 type EventMessageCreate struct {
-	ModelMessage `json:"-"`
+	ModelMessage
 }
 
 // May not be full message.
 type EventMessageUpdate struct {
-	ModelMessage `json:"-"`
+	ModelMessage
 }
 
 type EventMessageDelete struct {
@@ -144,6 +144,13 @@ type EventPresenceUpdate struct {
 	Status  string     `json:"status"`
 }
 
+const (
+	StatusIdle    = "idle"
+	StatusDND     = "dnd"
+	StatusOnline  = "online"
+	StatusOffline = "offline"
+)
+
 type ModelGame struct {
 	Name string  `json:"name"`
 	Type *int    `json:"type"`
@@ -152,13 +159,8 @@ type ModelGame struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	GameTypeGame = iota
-	GameTypeStreaming
-
-	StatusIdle    = "idle"
-	StatusDND     = "dnd"
-	StatusOnline  = "online"
-	StatusOffline = "offline"
+	ModelGameTypeGame      = iota
+	ModelGameTypeStreaming
 )
 
 type EventTypingStart struct {
@@ -168,11 +170,11 @@ type EventTypingStart struct {
 }
 
 type EventUserUpdate struct {
-	ModelUser `json:"-"`
+	ModelUser
 }
 
 type EventVoiceStateUpdate struct {
-	ModelVoiceState `json:"-"`
+	ModelVoiceState
 }
 
 type eventVoiceServerUpdate struct {

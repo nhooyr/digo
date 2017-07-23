@@ -87,13 +87,13 @@ type ModelGuildEmoji struct {
 	Managed       bool     `json:"managed"`
 }
 
-type ModelEndpointGuilds struct {
+type EndpointGuilds struct {
 	*endpoint
 }
 
-func (c *Client) Guilds() ModelEndpointGuilds {
+func (c *Client) Guilds() EndpointGuilds {
 	e2 := c.e.appendMajor("guilds")
-	return ModelEndpointGuilds{e2}
+	return EndpointGuilds{e2}
 }
 
 type ParamsGuildsCreate struct {
@@ -116,7 +116,7 @@ type ParamsGuildChannelCreate struct {
 }
 
 // TODO Docs for this are not clear on what the Channels field should be, and the link for that field is broken.
-func (e ModelEndpointGuilds) Create(params *ParamsGuildsCreate) (g *ModelGuild, err error) {
+func (e EndpointGuilds) Create(params *ParamsGuildsCreate) (g *ModelGuild, err error) {
 	return g, e.doMethod("POST", params, &g)
 }
 

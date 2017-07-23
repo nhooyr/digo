@@ -44,6 +44,7 @@ type Conn struct {
 	closeChan chan struct{}
 	wg        sync.WaitGroup
 
+	ready         bool
 	reconnectChan chan struct{}
 
 	wsConn *websocket.Conn
@@ -57,17 +58,23 @@ func NewConn() *Conn {
 	internalEventMux := newEventMux()
 	internalEventMux.Register(func(ctx context.Context, conn *Conn, e *eventReady) {
 		conn.sessionID = e.SessionID
+		conn.ready = true
 	})
 	return &Conn{
 		internalEventMux: internalEventMux,
 		EventMux:         newEventMux(),
 		closeChan:        make(chan struct{}),
 		reconnectChan:    make(chan struct{}),
+		ready: true,
 	}
 }
 
 // TODO maybe take context.Context? though I doubt it's necessary
 func (c *Conn) Dial() (err error) {
+	if !c.ready {
+		return errors.New("already tried to connect and failed")
+	}
+
 	c.heartbeatAcknowledged = true
 
 	if c.gatewayURL == "" {
@@ -100,7 +107,7 @@ func (c *Conn) Dial() (err error) {
 }
 
 const (
-	operationDispatch = iota
+	operationDispatch            = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -306,9 +313,6 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 		c.heartbeatAcknowledged = true
 		c.mu.Unlock()
 	case operationInvalidSession:
-		// Wait out the possible rate limit.
-		// TODO Need to have a max limit on this, only one time imo.
-		time.Sleep(time.Second * 5)
 		err := c.identify()
 		if err != nil {
 			return err
@@ -321,6 +325,11 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 		c.mu.Unlock()
 
 		err := c.internalEventMux.route(ctx, c, p, true)
+		if err != nil {
+			return err
+		}
+
+		err = c.EventMux.route(ctx, c, p, false)
 		if err != nil {
 			return err
 		}

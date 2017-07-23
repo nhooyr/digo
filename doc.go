@@ -6,7 +6,7 @@ TODO update test names
 TODO need context.Context on rest API methods?
 TODO no race conditions in gateway.go and it implements everything correctly?
 TODO which events need to be public?
-
+TODO https://discordapp.com/developers/docs/topics/oauth2#get-current-application-information
 
 RestAPI does not use One Methods e.g. Channels().One(cID) because too much stutter.
 RestAPI does not have all methods defined on single Client because too little structure and hard code completion/doc finding
