@@ -152,7 +152,7 @@ type Game struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	GameTypeGame      = iota
+	GameTypeGame = iota
 	GameTypeStreaming
 
 	StatusIdle    = "idle"
@@ -258,8 +258,8 @@ func (em eventMux) route(ctx context.Context, conn *Conn, p *receivedPayload, sy
 		// Discord better not be sending unknown events.
 		return nil
 	}
-	e := reflect.New(reflect.TypeOf(h).In(2)).Interface()
-	err := json.Unmarshal(p.Data, &e)
+	e := reflect.New(reflect.TypeOf(h).In(2))
+	err := json.Unmarshal(p.Data, e.Interface())
 	if err != nil {
 		return err
 	}
