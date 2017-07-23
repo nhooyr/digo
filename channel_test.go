@@ -15,7 +15,7 @@ func TestClient_GetChannelMessages(t *testing.T) {
 	params := &ParamsMessagesGet{
 		Limit: 5,
 	}
-	messages, err := c.Channel(cID).Messages().Get(params)
+	messages, err := client.Channel(cID).Messages().Get(params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,18 +31,18 @@ func TestClient_CreateMessage(t *testing.T) {
 
 	params := &ParamsMessageCreate{
 		Content: "boar",
-		File: &File{
+		File: &ParamsFile{
 			Name:    "screenshot.png",
 			Content: f,
 		},
-		Embed: &Embed{
+		Embed: &ModelEmbed{
 			Description: "heads",
-			Image: &EmbedImage{
+			Image: &ModelEmbedImage{
 				URL: "attachment://screenshot.png",
 			},
 		},
 	}
-	msg, err := c.Channel(cID).Messages().Create(params)
+	msg, err := client.Channel(cID).Messages().Create(params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,21 +50,21 @@ func TestClient_CreateMessage(t *testing.T) {
 }
 
 func TestClient_CreateReaction(t *testing.T) {
-	err := c.Channel(cID).Message(mID).Reactions().Create(emoji)
+	err := client.Channel(cID).Message(mID).Reactions().Create(emoji)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClient_DeleteReaction(t *testing.T) {
-	err := c.Channel(cID).Message(mID).Reaction(emoji, "@me").Delete()
+	err := client.Channel(cID).Message(mID).Reaction(emoji, "@me").Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClient_GetReactions(t *testing.T) {
-	users, err := c.Channel(cID).Message(mID).Reactions().Get(emoji)
+	users, err := client.Channel(cID).Message(mID).Reactions().Get(emoji)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestClient_GetReactions(t *testing.T) {
 }
 
 func TestClient_DeleteReactions(t *testing.T) {
-	err := c.Channel(cID).Message(mID).Reactions().Delete()
+	err := client.Channel(cID).Message(mID).Reactions().Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestClient_UpdateMessage(t *testing.T) {
 	params := &ParamsMessageEdit{
 		Content: "updated wow",
 	}
-	m, err := c.Channel(cID).Message(mID).Edit(params)
+	m, err := client.Channel(cID).Message(mID).Edit(params)
 	if err != nil {
 		t.Fatal(err)
 	}

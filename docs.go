@@ -5,6 +5,9 @@ TODO need any nulls?
 TODO update test names
 TODO need context.Context on rest API methods?
 TODO does rest API even need to be exposed?
+TODO no race conditions in gateway.go and it implements everything correctly?
+TODO which events need to be public?
+
 
 RestAPI does not use One Methods e.g. Channels().One(cID) because too much stutter.
 RestAPI does not have all methods defined on single Client because too little structure and hard code completion/doc finding

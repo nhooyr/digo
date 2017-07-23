@@ -1,6 +1,6 @@
 package discgo
 
-type Role struct {
+type ModelRole struct {
 	ID          string
 	Name        string
 	Color       int

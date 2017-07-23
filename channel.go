@@ -16,149 +16,149 @@ import (
 	"gopkg.in/guregu/null.v3"
 )
 
-// Channel represents a channel in Discord.
-type Channel struct {
+// ModelChannel represents a channel in Discord.
+type ModelChannel struct {
 	ID   string      `json:"id"`
 	Type channelType `json:"type"`
 
 	// All of these may be null. They are pointers so that consumer's
 	// of the package will be reminded that they may be null.
-	GuildID              *string                 `json:"guild_id"`
-	Position             *int                    `json:"position"`
-	PermissionOverwrites *[]*PermissionOverwrite `json:"permission_overwrites"`
-	Name                 *string                 `json:"name"`
-	Topic                *string                 `json:"topic"`
-	LastMessageID        *string                 `json:"last_message_id"`
-	Bitrate              *int                    `json:"bitrate"`
-	UserLimit            *int                    `json:"user_limit"`
-	Recipients           *[]*User                `json:"recipients"`
-	Icon                 *string                 `json:"icon"`
-	OwnerID              *string                 `json:"owner_id"`
-	ApplicationID        *string                 `json:"application_id"`
+	GuildID              *string                      `json:"guild_id"`
+	Position             *int                         `json:"position"`
+	PermissionOverwrites *[]*ModelPermissionOverwrite `json:"permission_overwrites"`
+	Name                 *string                      `json:"name"`
+	Topic                *string                      `json:"topic"`
+	LastMessageID        *string                      `json:"last_message_id"`
+	Bitrate              *int                         `json:"bitrate"`
+	UserLimit            *int                         `json:"user_limit"`
+	Recipients           *[]*ModelUser                `json:"recipients"`
+	Icon                 *string                      `json:"icon"`
+	OwnerID              *string                      `json:"owner_id"`
+	ApplicationID        *string                      `json:"application_id"`
 }
 
 type channelType int
 
 const (
-	GuildTextChannel = iota
-	DMChannel
-	GuildVoiceChannel
-	GroupDMChannel
-	GuildCategoryChannel
+	ModelChannelTypeGuildText = iota
+	ModelChannelTypeDM
+	ModelChannelTypeGuildVoice
+	ModelChannelTypeGroupDM
+	ModelChannelTypeGuildCategory
 )
 
-type Message struct {
-	ID              string        `json:"id"`
-	ChannelID       string        `json:"channel_id"`
-	Author          *User         `json:"author"`
-	Content         string        `json:"content"`
-	Timestamp       time.Time     `json:"timestamp"`
-	EditedTimestamp *time.Time    `json:"edited_timestamp"`
-	TTS             bool          `json:"tts"`
-	MentionEveryone bool          `json:"mention_everyone"`
-	Mentions        []*User       `json:"mentions"`
-	MentionRoles    []string      `json:"mention_roles"`
-	Attachments     []*Attachment `json:"attachments"`
-	Embeds          []*Embed      `json:"embeds"`
-	Reactions       *[]*Reaction  `json:"reactions"`
-	Nonce           *string       `json:"nonce"`
-	Pinned          bool          `json:"pinned"`
-	WebhookID       *string       `json:"webhook_id"`
-	Type            messageType   `json:"type"`
+type ModelMessage struct {
+	ID              string             `json:"id"`
+	ChannelID       string             `json:"channel_id"`
+	Author          *ModelUser         `json:"author"`
+	Content         string             `json:"content"`
+	Timestamp       time.Time          `json:"timestamp"`
+	EditedTimestamp *time.Time         `json:"edited_timestamp"`
+	TTS             bool               `json:"tts"`
+	MentionEveryone bool               `json:"mention_everyone"`
+	Mentions        []*ModelUser       `json:"mentions"`
+	MentionRoles    []string           `json:"mention_roles"`
+	Attachments     []*ModelAttachment `json:"attachments"`
+	Embeds          []*ModelEmbed      `json:"embeds"`
+	Reactions       *[]*ModelReaction  `json:"reactions"`
+	Nonce           *string            `json:"nonce"`
+	Pinned          bool               `json:"pinned"`
+	WebhookID       *string            `json:"webhook_id"`
+	Type            messageType        `json:"type"`
 }
 
 type messageType int
 
 const (
-	DefaultMessage = iota
-	RecipientAdd
-	RecipientRemove
-	Call
-	ChannelNameChange
-	ChannelIconChange
-	ChannelPinnedMessage
-	GuildMemberJoin
+	ModelMessageTypeDefault = iota
+	ModelMessageTypeRecipientAdd
+	ModelMessageTypeRecipientRemove
+	ModelMessageTypeCall
+	ModelMessageTypeChannelNameChange
+	ModelMessageTypeChannelIconChange
+	ModelMessageTypeChannelPinned
+	ModelMessageTypeGuildMemberJoin
 )
 
-type Reaction struct {
-	Count int            `json:"count"`
-	Me    bool           `json:"me"`
-	Emoji *ReactionEmoji `json:"emoji"`
+type ModelReaction struct {
+	Count int                 `json:"count"`
+	Me    bool                `json:"me"`
+	Emoji *ModelReactionEmoji `json:"emoji"`
 }
 
-type ReactionEmoji struct {
+type ModelReactionEmoji struct {
 	ID   *string `json:"id"`
 	Name string  `json:"name"`
 }
 
-type PermissionOverwrite struct {
+type ModelPermissionOverwrite struct {
 	ID    string `json:"id"`
 	Type  string `json:"type"`
 	Allow int    `json:"allow"`
 	Deny  int    `json:"deny"`
 }
 
-type Embed struct {
-	Title       string          `json:"title,omitempty"`
-	Type        string          `json:"type,omitempty"`
-	Description string          `json:"description,omitempty"`
-	URL         string          `json:"url,omitempty"`
-	Timestamp   *time.Time      `json:"timestamp,omitempty"`
-	Color       int             `json:"color,omitempty"`
-	Footer      *EmbedFooter    `json:"footer,omitempty"`
-	Image       *EmbedImage     `json:"image,omitempty"`
-	Thumbnail   *EmbedThumbnail `json:"thumbnail,omitempty"`
-	Video       *EmbedVideo     `json:"video,omitempty"`
-	Provider    *EmbedProvider  `json:"provider,omitempty"`
-	Author      *EmbedAuthor    `json:"author,omitempty"`
-	Fields      []*EmbedField   `json:"fields,omitempty"`
+type ModelEmbed struct {
+	Title       string               `json:"title,omitempty"`
+	Type        string               `json:"type,omitempty"`
+	Description string               `json:"description,omitempty"`
+	URL         string               `json:"url,omitempty"`
+	Timestamp   *time.Time           `json:"timestamp,omitempty"`
+	Color       int                  `json:"color,omitempty"`
+	Footer      *ModelEmbedFooter    `json:"footer,omitempty"`
+	Image       *ModelEmbedImage     `json:"image,omitempty"`
+	Thumbnail   *ModelEmbedThumbnail `json:"thumbnail,omitempty"`
+	Video       *ModelEmbedVideo     `json:"video,omitempty"`
+	Provider    *ModelEmbedProvider  `json:"provider,omitempty"`
+	Author      *ModelEmbedAuthor    `json:"author,omitempty"`
+	Fields      []*ModelEmbedField   `json:"fields,omitempty"`
 }
 
-type EmbedThumbnail struct {
+type ModelEmbedThumbnail struct {
 	URL      string `json:"url,omitempty"`
 	ProxyURL string `json:"proxy_url,omitempty"`
 	Height   int    `json:"height,omitempty"`
 	Width    int    `json:"width,omitempty"`
 }
 
-type EmbedVideo struct {
+type ModelEmbedVideo struct {
 	URL    string `json:"url,omitempty"`
 	Height int    `json:"height,omitempty"`
 	Width  int    `json:"width,omitempty"`
 }
 
-type EmbedImage struct {
+type ModelEmbedImage struct {
 	URL      string `json:"url,omitempty"`
 	ProxyURL string `json:"proxy_url,omitempty"`
 	Height   int    `json:"height,omitempty"`
 	Width    int    `json:"width,omitempty"`
 }
 
-type EmbedProvider struct {
+type ModelEmbedProvider struct {
 	Name string `json:"name,omitempty"`
 	URL  string `json:"url,omitempty"`
 }
 
-type EmbedAuthor struct {
+type ModelEmbedAuthor struct {
 	Name         string `json:"name,omitempty"`
 	URL          string `json:"url,omitempty"`
 	IconURL      string `json:"icon_url,omitempty"`
 	ProxyIconURL string `json:"proxy_icon_url,omitempty"`
 }
 
-type EmbedFooter struct {
+type ModelEmbedFooter struct {
 	Text         string `json:"text,omitempty"`
 	IconURL      string `json:"icon_url,omitempty"`
 	ProxyIconURL string `json:"proxy_icon_url,omitempty"`
 }
 
-type EmbedField struct {
+type ModelEmbedField struct {
 	Name   string `json:"name,omitempty"`
 	Value  string `json:"value,omitempty"`
 	Inline bool   `json:"inline,omitempty"`
 }
 
-type Attachment struct {
+type ModelAttachment struct {
 	ID       string `json:"id"`
 	Filename string `json:"filename"`
 	Size     int    `json:"size"`
@@ -168,6 +168,7 @@ type Attachment struct {
 	Width    int    `json:"width"`
 }
 
+// TODO rename all of these
 func UserMention(uID string) string {
 	return fmt.Sprintf("<@%v>", uID)
 }
@@ -197,7 +198,7 @@ func (c *Client) Channel(cID string) EndpointChannel {
 	return EndpointChannel{e2}
 }
 
-func (e EndpointChannel) Get() (ch *Channel, err error) {
+func (e EndpointChannel) Get() (ch *ModelChannel, err error) {
 	return ch, e.doMethod("GET", nil, &ch)
 }
 
@@ -209,11 +210,11 @@ type ParamsChannelModify struct {
 	UserLimit null.Int    `json:"user_limit"`
 }
 
-func (e EndpointChannel) Modify(params *ParamsChannelModify) (ch *Channel, err error) {
+func (e EndpointChannel) Modify(params *ParamsChannelModify) (ch *ModelChannel, err error) {
 	return ch, e.doMethod("PATCH", params, &ch)
 }
 
-func (e EndpointChannel) Delete() (ch *Channel, err error) {
+func (e EndpointChannel) Delete() (ch *ModelChannel, err error) {
 	return ch, e.doMethod("DELETE", nil, &ch)
 }
 
@@ -258,7 +259,7 @@ func (params *ParamsMessagesGet) rawQuery() string {
 	return v.Encode()
 }
 
-func (e EndpointMessages) Get(params *ParamsMessagesGet) (messages []*Message, err error) {
+func (e EndpointMessages) Get(params *ParamsMessagesGet) (messages []*ModelMessage, err error) {
 	req := e.newRequest("GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
@@ -267,20 +268,19 @@ func (e EndpointMessages) Get(params *ParamsMessagesGet) (messages []*Message, e
 }
 
 type ParamsMessageCreate struct {
-	Content string `json:"content,omitempty"`
-	Nonce   string `json:"nonce,omitempty"`
-	TTS     bool   `json:"tts,omitempty"`
-	File    *File  `json:"-"`
-	Embed   *Embed `json:"embed,omitempty"`
+	Content string      `json:"content,omitempty"`
+	Nonce   string      `json:"nonce,omitempty"`
+	TTS     bool        `json:"tts,omitempty"`
+	File    *ParamsFile `json:"-"`
+	Embed   *ModelEmbed `json:"embed,omitempty"`
 }
 
-// TODO perhaps make an interface? like http.File?
-type File struct {
+type ParamsFile struct {
 	Name    string
 	Content io.Reader
 }
 
-func (e EndpointMessages) Create(params *ParamsMessageCreate) (m *Message, err error) {
+func (e EndpointMessages) Create(params *ParamsMessageCreate) (m *ModelMessage, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
@@ -328,17 +328,17 @@ func (e EndpointChannel) Message(mID string) EndpointMessage {
 	return EndpointMessage{e2}
 }
 
-func (e EndpointMessage) Get() (m *Message, err error) {
+func (e EndpointMessage) Get() (m *ModelMessage, err error) {
 	return m, e.doMethod("GET", nil, &m)
 }
 
 type ParamsMessageEdit struct {
 	// TODO should I allow setting the content to ""?
-	Content string `json:"content,omitempty"`
-	Embed   *Embed `json:"embed,omitempty"`
+	Content string      `json:"content,omitempty"`
+	Embed   *ModelEmbed `json:"embed,omitempty"`
 }
 
-func (e EndpointMessage) Edit(params *ParamsMessageEdit) (m *Message, err error) {
+func (e EndpointMessage) Edit(params *ParamsMessageEdit) (m *ModelMessage, err error) {
 	return m, e.doMethod("PATCH", params, &m)
 }
 
@@ -359,7 +359,7 @@ func (e EndpointReactions) Delete() error {
 	return e.doMethod("DELETE", nil, nil)
 }
 
-func (e EndpointReactions) Get(emoji string) (users []*User, err error) {
+func (e EndpointReactions) Get(emoji string) (users []*ModelUser, err error) {
 	e2 := e.appendMinor(emoji)
 	return users, e2.doMethod("GET", nil, &users)
 }
@@ -416,7 +416,7 @@ func (e EndpointChannel) Invites() EndpointInvites {
 	return EndpointInvites{e2}
 }
 
-func (e EndpointInvites) Get() (invites []*Invite, err error) {
+func (e EndpointInvites) Get() (invites []*ModelInvite, err error) {
 	return invites, e.doMethod("GET", nil, &invites)
 }
 
@@ -427,7 +427,7 @@ type ParamsInviteCreate struct {
 	Unique    bool     `json:"unique,omitempty"`
 }
 
-func (e EndpointInvites) Create(params *ParamsInviteCreate) (invite *Invite, err error) {
+func (e EndpointInvites) Create(params *ParamsInviteCreate) (invite *ModelInvite, err error) {
 	return invite, e.doMethod("POST", params, &invite)
 }
 
@@ -453,7 +453,7 @@ func (e EndpointChannel) Pins() EndpointPins {
 	return EndpointPins{e2}
 }
 
-func (e EndpointPins) Get() (messages []*Message, err error) {
+func (e EndpointPins) Get() (messages []*ModelMessage, err error) {
 	return messages, e.doMethod("GET", nil, &messages)
 }
 

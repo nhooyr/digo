@@ -6,81 +6,80 @@ import (
 	"time"
 )
 
-type Guild struct {
-	ID                          string        `json:"id"`
-	Name                        string        `json:"name"`
-	Icon                        string        `json:"icon"`
-	Splash                      string        `json:"splash"`
-	OwnerID                     string        `json:"owner_id"`
-	Region                      string        `json:"region"`
-	AFKChannelID                string        `json:"afk_channel_id"`
-	AFKTimeout                  int           `json:"afk_timeout"`
-	EmbedEnabled                bool          `json:"embed_enabled"`
-	EmbedChannelID              string        `json:"embed_channel_id"`
-	VerificationLevel           int           `json:"verification_level"`
-	DefaultMessageNotifications int           `json:"default_message_notifications"`
-	Roles                       []*Role       `json:"roles"`
-	Emojis                      []*GuildEmoji `json:"emojis"`
-	Features                    []string      `json:"features"` // not sure if this is right, DiscordGo doesn't have anything
-	MFALevel                    int           `json:"mfa_level"`
-	JoinedAt                    time.Time     `json:"joined_at"`
+type ModelGuild struct {
+	ID                          string             `json:"id"`
+	Name                        string             `json:"name"`
+	Icon                        string             `json:"icon"`
+	Splash                      string             `json:"splash"`
+	OwnerID                     string             `json:"owner_id"`
+	Region                      string             `json:"region"`
+	AFKChannelID                string             `json:"afk_channel_id"`
+	AFKTimeout                  int                `json:"afk_timeout"`
+	EmbedEnabled                bool               `json:"embed_enabled"`
+	EmbedChannelID              string             `json:"embed_channel_id"`
+	VerificationLevel           int                `json:"verification_level"`
+	DefaultMessageNotifications int                `json:"default_message_notifications"`
+	Roles                       []*ModelRole       `json:"roles"`
+	Emojis                      []*ModelGuildEmoji `json:"emojis"`
+	Features                    []string           `json:"features"` // not sure if this is right, DiscordGo doesn't have anything
+	MFALevel                    int                `json:"mfa_level"`
+	JoinedAt                    time.Time          `json:"joined_at"`
 
 	// These fields are only sent within the GUILD_CREATE event
-	Large       *bool           `json:"large"`
-	Unavailable *bool           `json:"unavailable"`
-	MemberCount *int            `json:"member_count"`
-	VoiceStates *[]*VoiceState  `json:"voice_states"` // without guild_id key
-	Members     *[]*GuildMember `json:"members"`
-	Channels    *[]*Channel     `json:"channels"`
-	Presences   *[]*Presence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
+	Large       *bool                `json:"large"`
+	Unavailable *bool                `json:"unavailable"`
+	MemberCount *int                 `json:"member_count"`
+	VoiceStates *[]*ModelVoiceState  `json:"voice_states"` // without guild_id key
+	Members     *[]*ModelGuildMember `json:"members"`
+	Channels    *[]*ModelChannel     `json:"channels"`
+	Presences   *[]*ModelPresence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
 }
 
-// TOOD maybe Guild Presence rename?
-type Presence struct {
-	User   *User  `json:"user"`
-	Game   *Game  `json:"game"`
-	Status string `json:"status"`
+type ModelPresence struct {
+	User   *ModelUser `json:"user"`
+	Game   *ModelGame `json:"game"`
+	Status string     `json:"status"`
 }
 
-type UnavailableGuild struct {
+type ModelUnavailableGuild struct {
 	ID          string `json:"id"`
 	Unavailable bool   `json:"unavailable"`
 }
 
-type GuildEmbed struct {
+type ModelGuildEmbed struct {
 	Enabled   bool   `json:"enabled,omitempty"`
 	ChannelID string `json:"channel_id,omitempty"`
 }
 
-type GuildMember struct {
-	User     *User     `json:"user"`
-	Nick     *string   `json:"nick"`
-	Roles    []string  `json:"roles"`
-	JoinedAt time.Time `json:"joined_at"`
-	Deaf     bool      `json:"deaf"`
-	Mute     bool      `json:"mute"`
+type ModelGuildMember struct {
+	User     *ModelUser `json:"user"`
+	Nick     *string    `json:"nick"`
+	Roles    []string   `json:"roles"`
+	JoinedAt time.Time  `json:"joined_at"`
+	Deaf     bool       `json:"deaf"`
+	Mute     bool       `json:"mute"`
 }
 
-type Integration struct {
-	ID                string              `json:"id"`
-	Name              string              `json:"name"`
-	Type              string              `json:"type"`
-	Enabled           bool                `json:"enabled"`
-	Syncing           bool                `json:"syncing"`
-	RoleID            string              `json:"role_id"`
-	ExpireBehaviour   int                 `json:"expire_behaviour"`
-	ExpireGracePeriod int                 `json:"expire_grace_period"`
-	User              *User               `json:"user"`
-	Account           *IntegrationAccount `json:"account"`
-	SyncedAt          time.Time           `json:"synced_at"`
+type ModelIntegration struct {
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	Type              string                   `json:"type"`
+	Enabled           bool                     `json:"enabled"`
+	Syncing           bool                     `json:"syncing"`
+	RoleID            string                   `json:"role_id"`
+	ExpireBehaviour   int                      `json:"expire_behaviour"`
+	ExpireGracePeriod int                      `json:"expire_grace_period"`
+	User              *ModelUser               `json:"user"`
+	Account           *ModelIntegrationAccount `json:"account"`
+	SyncedAt          time.Time                `json:"synced_at"`
 }
 
-type IntegrationAccount struct {
+type ModelIntegrationAccount struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-type GuildEmoji struct {
+type ModelGuildEmoji struct {
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
 	Roles         []string `json:"roles"`
@@ -88,13 +87,13 @@ type GuildEmoji struct {
 	Managed       bool     `json:"managed"`
 }
 
-type EndpointGuilds struct {
+type ModelEndpointGuilds struct {
 	*endpoint
 }
 
-func (c *Client) Guilds() EndpointGuilds {
+func (c *Client) Guilds() ModelEndpointGuilds {
 	e2 := c.e.appendMajor("guilds")
-	return EndpointGuilds{e2}
+	return ModelEndpointGuilds{e2}
 }
 
 type ParamsGuildsCreate struct {
@@ -103,21 +102,21 @@ type ParamsGuildsCreate struct {
 	Icon                        string                      `json:"icon,omitempty"`
 	VerificationLevel           int                         `json:"verification_level,omitempty"`
 	DefaultMessageNotifications int                         `json:"default_message_notifications,omitempty"`
-	Roles                       []*Role                     `json:"roles,omitempty"`
+	Roles                       []*ModelRole                `json:"roles,omitempty"`
 	Channels                    []*ParamsGuildChannelCreate `json:"channels,omitempty"`
 }
 
 // TODO not sure about the naming on this?
 type ParamsGuildChannelCreate struct {
-	Name                 string                 `json:"name"`
-	Type                 string                 `json:"type,omitempty"`
-	Bitrate              int                    `json:"bitrate,omitempty"`
-	UserLimit            int                    `json:"user_limit,omitempty"`
-	PermissionOverwrites []*PermissionOverwrite `json:"permission_overwrites,omitempty"`
+	Name                 string                      `json:"name"`
+	Type                 string                      `json:"type,omitempty"`
+	Bitrate              int                         `json:"bitrate,omitempty"`
+	UserLimit            int                         `json:"user_limit,omitempty"`
+	PermissionOverwrites []*ModelPermissionOverwrite `json:"permission_overwrites,omitempty"`
 }
 
 // TODO Docs for this are not clear on what the Channels field should be, and the link for that field is broken.
-func (e EndpointGuilds) Create(params *ParamsGuildsCreate) (g *Guild, err error) {
+func (e ModelEndpointGuilds) Create(params *ParamsGuildsCreate) (g *ModelGuild, err error) {
 	return g, e.doMethod("POST", params, &g)
 }
 
@@ -131,7 +130,7 @@ func (c *Client) Guild(gID string) EndpointGuild {
 	return EndpointGuild{e2}
 }
 
-func (e EndpointGuild) Get(gID string) (g *Guild, err error) {
+func (e EndpointGuild) Get(gID string) (g *ModelGuild, err error) {
 	return g, e.doMethod("GET", nil, &g)
 }
 
@@ -147,11 +146,11 @@ type ParamsGuildModify struct {
 	Splash                      string `json:"splash,omitempty"`
 }
 
-func (e EndpointGuild) Modify(params *ParamsGuildModify) (g *Guild, err error) {
+func (e EndpointGuild) Modify(params *ParamsGuildModify) (g *ModelGuild, err error) {
 	return g, e.doMethod("PATCH", params, &g)
 }
 
-func (e EndpointGuild) Delete() (g *Guild, err error) {
+func (e EndpointGuild) Delete() (g *ModelGuild, err error) {
 	return g, e.doMethod("DELETE", nil, &g)
 }
 
@@ -184,11 +183,11 @@ func (e EndpointGuild) Channels() EndpointGuildChannels {
 	return EndpointGuildChannels{e2}
 }
 
-func (e EndpointGuildChannels) Get() (channels []*Channel, err error) {
+func (e EndpointGuildChannels) Get() (channels []*ModelChannel, err error) {
 	return channels, e.doMethod("GET", nil, &channels)
 }
 
-func (e EndpointGuildChannels) Create(params *ParamsGuildChannelCreate) (ch *Channel, err error) {
+func (e EndpointGuildChannels) Create(params *ParamsGuildChannelCreate) (ch *ModelChannel, err error) {
 	return ch, e.doMethod("POST", params, &ch)
 }
 
@@ -197,7 +196,7 @@ type ParamsGuildChannelsModifyPositions struct {
 	Position int    `json:"position"`
 }
 
-func (e EndpointGuildChannels) ModifyPositions(params []*ParamsGuildChannelsModifyPositions) (channels *Channel, err error) {
+func (e EndpointGuildChannels) ModifyPositions(params []*ParamsGuildChannelsModifyPositions) (channels *ModelChannel, err error) {
 	return channels, e.doMethod("PATCH", params, &channels)
 }
 
@@ -227,7 +226,7 @@ func (params *ParamsGuildMembersGet) rawQuery() string {
 	return v.Encode()
 }
 
-func (e EndpointGuildMembers) Get(params *ParamsGuildMembersGet) (guildMembers []*GuildMember, err error) {
+func (e EndpointGuildMembers) Get(params *ParamsGuildMembersGet) (guildMembers []*ModelGuildMember, err error) {
 	req := e.newRequest("GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
@@ -245,28 +244,28 @@ func (e EndpointGuild) Member(uID string) EndpointGuildMember {
 }
 
 type ParamsGuildMemberAdd struct {
-	AccessToken string  `json:"access_token"`
-	Nick        string  `json:"nick,omitempty"`
-	Roles       []*Role `json:"roles,omitempty"`
-	Mute        bool    `json:"mute,omitempty"`
-	Deaf        bool    `json:"deaf,omitempty"`
+	AccessToken string       `json:"access_token"`
+	Nick        string       `json:"nick,omitempty"`
+	Roles       []*ModelRole `json:"roles,omitempty"`
+	Mute        bool         `json:"mute,omitempty"`
+	Deaf        bool         `json:"deaf,omitempty"`
 }
 
-func (e EndpointGuildMember) Add(params *ParamsGuildMemberAdd) (gm *GuildMember, err error) {
+func (e EndpointGuildMember) Add(params *ParamsGuildMemberAdd) (gm *ModelGuildMember, err error) {
 	return gm, e.doMethod("PUT", params, &gm)
 }
 
-func (e EndpointGuildMember) Get() (gm *GuildMember, err error) {
+func (e EndpointGuildMember) Get() (gm *ModelGuildMember, err error) {
 	return gm, e.doMethod("GET", nil, &gm)
 }
 
 // TODO rename this and all other params to postfix params
 type ParamsGuildMemberModify struct {
-	Nick      string  `json:"nick,omitempty"`
-	Roles     []*Role `json:"roles,omitempty"`
-	Mute      *bool   `json:"mute,omitempty"` // pointer so that you can set false
-	Deaf      *bool   `json:"deaf,omitempty"` // pointer so that you can set false
-	ChannelID string  `json:"channel_id,omitempty"`
+	Nick      string       `json:"nick,omitempty"`
+	Roles     []*ModelRole `json:"roles,omitempty"`
+	Mute      *bool        `json:"mute,omitempty"` // pointer so that you can set false
+	Deaf      *bool        `json:"deaf,omitempty"` // pointer so that you can set false
+	ChannelID string       `json:"channel_id,omitempty"`
 }
 
 func (e EndpointGuildMember) Modify(params *ParamsGuildMemberModify) error {
@@ -303,7 +302,7 @@ func (e EndpointGuild) Bans() EndpointGuildBans {
 	return EndpointGuildBans{e2}
 }
 
-func (e EndpointGuildBans) Get() (users []*User, err error) {
+func (e EndpointGuildBans) Get() (users []*ModelUser, err error) {
 	return users, e.doMethod("GET", nil, &users)
 }
 
@@ -337,7 +336,7 @@ func (e EndpointGuild) Roles() EndpointRoles {
 	return EndpointRoles{e2}
 }
 
-func (e EndpointRoles) Get() (roles []*Role, err error) {
+func (e EndpointRoles) Get() (roles []*ModelRole, err error) {
 	return roles, e.doMethod("GET", nil, &roles)
 }
 
@@ -350,7 +349,7 @@ type ParamsRoleCreate struct {
 	Mentionable bool `json:"mentionable,omitempty"`
 }
 
-func (e EndpointRoles) Create(params *ParamsRoleCreate) (r *Role, err error) {
+func (e EndpointRoles) Create(params *ParamsRoleCreate) (r *ModelRole, err error) {
 	return r, e.doMethod("GET", params, &r)
 }
 
@@ -359,7 +358,7 @@ type ParamsRolesModifyPositions struct {
 	Position int    `json:"position"`
 }
 
-func (e EndpointRoles) ModifyPositions(params *ParamsRolesModifyPositions) (roles []*Role, err error) {
+func (e EndpointRoles) ModifyPositions(params *ParamsRolesModifyPositions) (roles []*ModelRole, err error) {
 	return roles, e.doMethod("PATCH", params, &roles)
 }
 
@@ -381,7 +380,7 @@ type ParamsRoleModify struct {
 	Mentionable bool   `json:"mentionable,omitempty"`
 }
 
-func (e EndpointRole) Modify(params *ParamsRoleModify) (r *Role, err error) {
+func (e EndpointRole) Modify(params *ParamsRoleModify) (r *ModelRole, err error) {
 	return r, e.doMethod("PATCH", params, &r)
 }
 
@@ -445,7 +444,7 @@ func (e EndpointGuild) Integrations() EndpointIntegrations {
 	return EndpointIntegrations{e2}
 }
 
-func (e EndpointIntegrations) Get() (integrations []*Integration, err error) {
+func (e EndpointIntegrations) Get() (integrations []*ModelIntegration, err error) {
 	return integrations, e.doMethod("GET", nil, &integrations)
 }
 
@@ -496,10 +495,10 @@ func (e EndpointGuild) Embed() EndpointGuildEmbed {
 	return EndpointGuildEmbed{e2}
 }
 
-func (e EndpointGuildEmbed) Get() (ge *GuildEmbed, err error) {
+func (e EndpointGuildEmbed) Get() (ge *ModelGuildEmbed, err error) {
 	return ge, e.doMethod("GET", nil, &ge)
 }
 
-func (e EndpointGuildEmbed) Modify(ge *GuildEmbed) (newGE *GuildEmbed, err error) {
+func (e EndpointGuildEmbed) Modify(ge *ModelGuildEmbed) (newGE *ModelGuildEmbed, err error) {
 	return newGE, e.doMethod("PATCH", ge, &newGE)
 }

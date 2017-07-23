@@ -1,27 +1,20 @@
 package discgo
 
 import (
+	"compress/zlib"
 	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"runtime"
+	"sync"
 	"time"
 
-	"sync"
-
-	"runtime"
-
-	"compress/zlib"
-	"errors"
-
-	"strings"
+	"context"
 
 	"github.com/gorilla/websocket"
 	"github.com/nhooyr/log"
 )
-
-type Game struct {
-	Name string  `json:"name"`
-	Type *int    `json:"type"`
-	URL  *string `json:"url"`
-}
 
 type endpointGateway struct {
 	*endpoint
@@ -40,18 +33,18 @@ func (g endpointGateway) get() (url string, err error) {
 }
 
 type Conn struct {
-	token      string
-	userAgent  string
-	gatewayURL string
+	Client   *Client
+	EventMux eventMux
+
+	internalEventMux eventMux
+	gatewayURL       string
 
 	sessionID string
 
-	closeChan  chan struct{}
-	closeOnce  sync.Once
-	waitClosed chan struct{}
+	closeChan chan struct{}
+	wg        sync.WaitGroup
 
-	waitReadLoopClosed chan struct{}
-	reconnectChan      chan struct{}
+	reconnectChan chan struct{}
 
 	wsConn *websocket.Conn
 
@@ -60,64 +53,30 @@ type Conn struct {
 	sequenceNumber        int
 }
 
-func NewConn(apiClient *Client) (*Conn, error) {
-	gatewayURL, err := apiClient.gateway().get()
-	if err != nil {
-		return nil, err
-	}
-	gatewayURL += "?v=" + apiVersion + "&encoding=json"
-	return &Conn{
-		token:              apiClient.Token,
-		userAgent:          apiClient.UserAgent,
-		gatewayURL:         gatewayURL,
-		closeChan:          make(chan struct{}),
-		waitClosed:         make(chan struct{}),
-		waitReadLoopClosed: make(chan struct{}),
-		reconnectChan:      make(chan struct{}),
-	}, nil
-}
-
-const (
-	dispatchOperation = iota
-	heartbeatOperation
-	identifyOperation
-	statusUpdateOperation
-	voiceStateUpdateOperation
-	voiceServerPingOperation
-	resumeOperation
-	reconnectOperation
-	requestGuildMembersOperation
-	invalidSessionOperation
-	helloOperation
-	heartbeatACKOperation
-)
-
-func (c *Conn) close() error {
-	// TODO I think this should be OK, but I'm not sure. Should there be a writerLoop routine to sync writes?
-	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
-	err := c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
-	err2 := c.wsConn.Close()
-	if err != nil {
-		return err
-	}
-	return err2
-}
-
-func (c *Conn) Close() error {
-	c.closeOnce.Do(func() {
-		close(c.closeChan)
-		<-c.waitClosed
+func NewConn() *Conn {
+	internalEventMux := newEventMux()
+	internalEventMux.Register(func(ctx context.Context, conn *Conn, e *eventReady) {
+		conn.sessionID = e.SessionID
 	})
-	return nil
+	return &Conn{
+		internalEventMux: internalEventMux,
+		EventMux:         newEventMux(),
+		closeChan:        make(chan struct{}),
+		reconnectChan:    make(chan struct{}),
+	}
 }
 
-type helloOPData struct {
-	HeartbeatInterval int      `json:"heartbeat_interval"`
-	Trace             []string `json:"_trace"`
-}
-
+// TODO maybe take context.Context? though I doubt it's necessary
 func (c *Conn) Dial() (err error) {
 	c.heartbeatAcknowledged = true
+
+	if c.gatewayURL == "" {
+		c.gatewayURL, err = c.Client.gateway().get()
+		if err != nil {
+			return err
+		}
+		c.gatewayURL += "?v=" + apiVersion + "&encoding=json"
+	}
 
 	// TODO Need to set read deadline for hello packet and I also need to set write deadlines.
 	// TODO also max message
@@ -135,12 +94,62 @@ func (c *Conn) Dial() (err error) {
 		return err
 	}
 
-	go c.readLoop()
+	go c.manager()
 
 	return nil
 }
 
-type resumeOPData struct {
+const (
+	operationDispatch = iota
+	operationHeartbeat
+	operationIdentify
+	operationStatusUpdate
+	operationVoiceStateUpdate
+	operationVoiceServerPing
+	operationResume
+	operationReconnect
+	operationRequestGuildMembers
+	operationInvalidSession
+	operationHello
+	operationHeartbeatACK
+)
+
+type sentPayload struct {
+	Operation int         `json:"op"`
+	Data      interface{} `json:"d,omitempty"`
+	Sequence  int         `json:"s,omitempty"`
+}
+
+type dataOpIdentify struct {
+	Token          string             `json:"token"`
+	Properties     identifyProperties `json:"properties"`
+	Compress       bool               `json:"compress"`
+	LargeThreshold int                `json:"large_threshold"`
+}
+
+type identifyProperties struct {
+	OS      string `json:"$os,omitempty"`
+	Browser string `json:"$browser,omitempty"`
+	Device  string `json:"$device,omitempty"`
+}
+
+func (c *Conn) identify() error {
+	p := &sentPayload{
+		Operation: operationIdentify,
+		Data: dataOpIdentify{
+			Token: c.Client.Token,
+			Properties: identifyProperties{
+				OS:      runtime.GOOS,
+				Browser: c.Client.UserAgent,
+			},
+			Compress:       true,
+			LargeThreshold: 250,
+		},
+	}
+	return c.wsConn.WriteJSON(p)
+}
+
+type dataOpResume struct {
 	Token     string `json:"token"`
 	SessionID string `json:"session_id"`
 	Seq       int    `json:"seq"`
@@ -148,10 +157,10 @@ type resumeOPData struct {
 
 func (c *Conn) resume() error {
 	c.mu.Lock()
-	p := &sendPayload{
-		Operation: resumeOperation,
-		Data: resumeOPData{
-			Token:     c.token,
+	p := &sentPayload{
+		Operation: operationResume,
+		Data: dataOpResume{
+			Token:     c.Client.Token,
 			SessionID: c.sessionID,
 			Seq:       c.sequenceNumber,
 		},
@@ -160,34 +169,102 @@ func (c *Conn) resume() error {
 	return c.wsConn.WriteJSON(p)
 }
 
-type readyEvent struct {
-	V               int        `json:"v"`
-	User            *User      `json:"user"`
-	PrivateChannels []*Channel `json:"private_channels"`
-	SessionID       string     `json:"session_id"`
-	Trace           []string   `json:"_trace"`
+func (c *Conn) manager() {
+	ctx, cancelFn := context.WithCancel(context.Background())
+	c.runWorker(func() {
+		c.readLoop(ctx)
+	})
+	select {
+	case <-c.reconnectChan:
+		cancelFn()
+		err := c.close()
+		if err != nil {
+			log.Print(err)
+		}
+		c.wg.Wait()
+
+		err = c.Dial()
+		if err != nil {
+			log.Print(err)
+		}
+	case <-c.closeChan:
+		cancelFn()
+		err := c.close()
+		if err != nil {
+			log.Print(err)
+		}
+		c.wg.Wait()
+		c.closeChan <- struct{}{}
+	}
 }
 
-type receivePayload struct {
+func (c *Conn) runWorker(fn func()) {
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		fn()
+	}()
+}
+
+type receivedPayload struct {
 	Operation      int             `json:"op"`
 	Data           json.RawMessage `json:"d"`
 	SequenceNumber int             `json:"s"`
 	Type           string          `json:"t"`
 }
 
-func (c *Conn) readPayload() (*receivePayload, error) {
-	var p receivePayload
+func (c *Conn) readLoop(ctx context.Context) {
+	for {
+		p, err := c.readPayload()
+		if err != nil {
+			if !isUseOfClosedError(err) {
+				log.Print(err)
+				// It's possible we're being shutdown right now too.
+				// Or maybe manager is already trying to reconnect.
+				select {
+				case c.reconnectChan <- struct{}{}:
+				case <-ctx.Done():
+				}
+			}
+			return
+		}
+
+		log.Print(p.Operation)
+		if p.Type != "" {
+			log.Print(p.Type)
+		}
+		log.Print(p.SequenceNumber)
+		log.Printf("%s", p.Data)
+		log.Print()
+
+		err = c.onPayload(ctx, p)
+		if err != nil {
+			log.Print(err)
+			// It's possible we're being shutdown right now.
+			// Or maybe manager is already trying to reconnect.
+			select {
+			case c.reconnectChan <- struct{}{}:
+			case <-ctx.Done():
+			}
+		}
+	}
+}
+
+func (c *Conn) readPayload() (*receivedPayload, error) {
+	var p receivedPayload
 	msgType, r, err := c.wsConn.NextReader()
 	if err != nil {
 		return nil, err
 	}
 	switch msgType {
 	case websocket.BinaryMessage:
-		r, err = zlib.NewReader(r)
+		var z io.ReadCloser
+		z, err = zlib.NewReader(r)
 		if err != nil {
 			return nil, err
 		}
-		fallthrough
+		defer z.Close()
+		return &p, json.NewDecoder(z).Decode(&p)
 	case websocket.TextMessage:
 		return &p, json.NewDecoder(r).Decode(&p)
 	default:
@@ -196,102 +273,64 @@ func (c *Conn) readPayload() (*receivePayload, error) {
 	return &p, err
 }
 
-func (c *Conn) readLoop() {
-	for {
-		p, err := c.readPayload()
-		if err != nil {
-			errStr := err.Error()
-			if strings.Contains(errStr, "use of closed network connection") {
-				c.waitReadLoopClosed <- struct{}{}
-			} else {
-				log.Print(err)
-				// It's possible we're being shutdown right now too.
-				// Or maybe manager is already trying to reconnect.
-				select {
-				case c.reconnectChan <- struct{}{}:
-				case c.waitReadLoopClosed <- struct{}{}:
-				}
-			}
-			return
-		}
-		err = c.onPayload(p)
-		if err != nil {
-			log.Print(err)
-			// It's possible we're being shutdown right now too.
-			// Or maybe manager is already trying to reconnect.
-			select {
-			case c.reconnectChan <- struct{}{}:
-			case c.waitReadLoopClosed <- struct{}{}:
-			}
-		}
+// TODO not sure if this is how I should do it
+func isUseOfClosedError(err error) bool {
+	opErr, ok := err.(*net.OpError)
+	if !ok {
+		return false
 	}
+	if opErr.Err.Error() == "use of closed network connection" {
+		return true
+	}
+	return false
 }
 
-type sendPayload struct {
-	Operation int         `json:"op"`
-	Data      interface{} `json:"d,omitempty"`
-	Sequence  int         `json:"s,omitempty"`
+type dataOpHello struct {
+	HeartbeatInterval int      `json:"heartbeat_interval"`
+	Trace             []string `json:"_trace"`
 }
 
-func (c *Conn) onPayload(p *receivePayload) error {
+func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 	switch p.Operation {
-	case helloOperation:
-		var hello helloOPData
+	case operationHello:
+		var hello dataOpHello
 		err := json.Unmarshal(p.Data, &hello)
 		if err != nil {
 			return err
 		}
-		go c.manager(hello.HeartbeatInterval)
-	case heartbeatACKOperation:
+		c.runWorker(func() {
+			c.heartbeatLoop(ctx, hello.HeartbeatInterval)
+		})
+	case operationHeartbeatACK:
 		c.mu.Lock()
 		c.heartbeatAcknowledged = true
 		c.mu.Unlock()
-	case invalidSessionOperation:
+	case operationInvalidSession:
 		// Wait out the possible rate limit.
+		// TODO Need to have a max limit on this, only one time imo.
 		time.Sleep(time.Second * 5)
 		err := c.identify()
 		if err != nil {
 			return err
 		}
-	case reconnectOperation:
+	case operationReconnect:
 		return errors.New("reconnect operation")
-	case dispatchOperation:
+	case operationDispatch:
 		c.mu.Lock()
 		c.sequenceNumber = p.SequenceNumber
 		c.mu.Unlock()
 
-		go c.onEvent(p)
+		err := c.internalEventMux.route(ctx, c, p, true)
+		if err != nil {
+			return err
+		}
 	default:
 		panic("discord gone crazy; unexpected operation type")
 	}
-	log.Print(p.Operation)
-	if p.Type != "" {
-		log.Print(p.Type)
-	}
-	log.Print(p.SequenceNumber)
-	log.Printf("%s", p.Data)
-	log.Print()
 	return nil
 }
 
-func (c *Conn) onEvent(p *receivePayload) {
-	switch p.Type {
-	case "READY":
-		var ready readyEvent
-		err := json.Unmarshal(p.Data, &ready)
-		if err != nil {
-			log.Printf("closing connection due to invalid ready; %v", err)
-			err := c.Close()
-			if err != nil {
-				log.Print(err)
-			}
-			return
-		}
-		c.sessionID = ready.SessionID
-	}
-}
-
-func (c *Conn) manager(heartbeatInterval int) {
+func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
 	ticker := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -300,36 +339,14 @@ func (c *Conn) manager(heartbeatInterval int) {
 			err := c.heartbeat()
 			if err != nil {
 				log.Print(err)
-				err := c.close()
-				if err != nil {
-					log.Print(err)
-				}
-				<-c.waitReadLoopClosed
-
-				err = c.Dial()
-				if err != nil {
-					log.Print(err)
+				// Either we signal a reconnect or we have been signaled to close.
+				select {
+				case c.reconnectChan <- struct{}{}:
+				case <-ctx.Done():
 				}
 				return
 			}
-		case <-c.reconnectChan:
-			err := c.close()
-			if err != nil {
-				log.Print(err)
-			}
-
-			err = c.Dial()
-			if err != nil {
-				log.Print(err)
-			}
-			return
-		case <-c.closeChan:
-			err := c.close()
-			if err != nil {
-				log.Print(err)
-			}
-			<-c.waitReadLoopClosed
-			c.waitClosed <- struct{}{}
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -345,38 +362,23 @@ func (c *Conn) heartbeat() error {
 	c.heartbeatAcknowledged = false
 	c.mu.Unlock()
 
-	p := &sendPayload{Operation: heartbeatOperation, Data: sequenceNumber}
+	p := &sentPayload{Operation: operationHeartbeat, Data: sequenceNumber}
 	return c.wsConn.WriteJSON(p)
 }
 
-type identifyOPData struct {
-	Token          string             `json:"token"`
-	Properties     identifyProperties `json:"properties"`
-	Compress       bool               `json:"compress"`
-	LargeThreshold int                `json:"large_threshold"`
-}
-
-type identifyProperties struct {
-	OS              string `json:"$os,omitempty"`
-	Browser         string `json:"$browser,omitempty"`
-	Device          string `json:"$device,omitempty"`
-	Referrer        string `json:"$referrer,omitempty"`
-	ReferringDomain string `json:"$referring_domain,omitempty"`
-}
-
-func (c *Conn) identify() error {
-	p := &sendPayload{
-		Operation: identifyOperation,
-		Data: identifyOPData{
-			Token: c.token,
-			Properties: identifyProperties{
-				OS:      runtime.GOOS,
-				Browser: c.userAgent,
-			},
-			// TODO COMPRESS!!!
-			Compress:       true,
-			LargeThreshold: 250,
-		},
+func (c *Conn) close() error {
+	// TODO I think this should be OK, but I'm not sure. Should there be a writerLoop routine to sync writes?
+	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
+	err := c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
+	err2 := c.wsConn.Close()
+	if err != nil {
+		return err
 	}
-	return c.wsConn.WriteJSON(p)
+	return err2
+}
+
+func (c *Conn) Close() error {
+	c.closeChan <- struct{}{}
+	<-c.closeChan
+	return nil
 }
