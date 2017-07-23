@@ -79,7 +79,7 @@ type EventGuildMemberUpdate struct {
 }
 
 type EventGuildMembersChunk struct {
-	GuildID string `json:"guild_id"`
+	GuildID string              `json:"guild_id"`
 	Members []*ModelGuildMember `json:"members"`
 }
 
@@ -159,7 +159,7 @@ type ModelGame struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	ModelGameTypeGame      = iota
+	ModelGameTypeGame = iota
 	ModelGameTypeStreaming
 )
 

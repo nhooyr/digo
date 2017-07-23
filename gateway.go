@@ -65,15 +65,17 @@ func NewConn() *Conn {
 		EventMux:         newEventMux(),
 		closeChan:        make(chan struct{}),
 		reconnectChan:    make(chan struct{}),
-		ready: true,
+		ready:            true,
 	}
 }
 
 // TODO maybe take context.Context? though I doubt it's necessary
+// If it errors without receiving a Ready event, then this method will always return an error.
 func (c *Conn) Dial() (err error) {
 	if !c.ready {
 		return errors.New("already tried to connect and failed")
 	}
+	c.ready = false
 
 	c.heartbeatAcknowledged = true
 
