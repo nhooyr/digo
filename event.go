@@ -3,6 +3,7 @@ package discgo
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 )
 
 type eventReady struct {
@@ -151,7 +152,7 @@ type Game struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	GameTypeGame = iota
+	GameTypeGame      = iota
 	GameTypeStreaming
 
 	StatusIdle    = "idle"
@@ -246,26 +247,25 @@ func (em eventMux) register(fn interface{}) {
 		em["VOICE_STATE_UPDATE"] = fn
 	case func(ctx context.Context, conn *Conn, e *eventVoiceServerUpdate):
 		em["VOICE_SERVER_UPDATE"] = fn
+	default:
+		panic("unknown event handler signature")
 	}
 }
 
 func (em eventMux) route(ctx context.Context, conn *Conn, p *receivedPayload, sync bool) error {
-	var fn func()
-	switch p.Type {
-	case "READY":
-		{
-			h, ok := em[p.Type]
-			if ok {
-				var e eventReady
-				err := json.Unmarshal(p.Data, &e)
-				if err != nil {
-					return err
-				}
-				fn = func() {
-					h.(func(context.Context, *Conn, *eventReady))(ctx, conn, &e)
-				}
-			}
-		}
+	h, ok := em[p.Type]
+	if !ok {
+		// Discord better not be sending unknown events.
+		return nil
+	}
+	e := reflect.New(reflect.TypeOf(h).In(2)).Interface()
+	err := json.Unmarshal(p.Data, &e)
+	if err != nil {
+		return err
+	}
+	args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(conn), e}
+	fn := func() {
+		reflect.ValueOf(h).Call(args)
 	}
 	if sync {
 		fn()
