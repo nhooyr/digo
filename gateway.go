@@ -12,6 +12,8 @@ import (
 
 	"context"
 
+	"math/rand"
+
 	"github.com/gorilla/websocket"
 	"github.com/nhooyr/log"
 )
@@ -44,12 +46,16 @@ type Conn struct {
 	closeChan chan struct{}
 	wg        sync.WaitGroup
 
-	ready         bool
+	lastIdentify time.Time
+	ready    bool
+	resuming bool
+
 	reconnectChan chan struct{}
 
-	wsConn *websocket.Conn
+	wsConn    *websocket.Conn
+	writeChan chan *sentPayload
 
-	mu                    sync.Mutex
+	heartbeatMu           sync.Mutex
 	heartbeatAcknowledged bool
 	sequenceNumber        int
 }
@@ -58,7 +64,6 @@ func NewConn() *Conn {
 	internalEventMux := newEventMux()
 	internalEventMux.Register(func(ctx context.Context, conn *Conn, e *eventReady) {
 		conn.sessionID = e.SessionID
-		conn.ready = true
 	})
 	return &Conn{
 		internalEventMux: internalEventMux,
@@ -70,14 +75,16 @@ func NewConn() *Conn {
 }
 
 // TODO maybe take context.Context? though I doubt it's necessary
-// If it errors without receiving a Ready event, then this method will always return an error.
+// If it errors without receiving a operationDispatch payload, then
+// this method will always return an error.
 func (c *Conn) Dial() (err error) {
 	if !c.ready {
 		return errors.New("already tried to connect and failed")
 	}
-	c.ready = false
 
+	c.ready = false
 	c.heartbeatAcknowledged = true
+	c.lastIdentify = time.Time{}
 
 	if c.gatewayURL == "" {
 		c.gatewayURL, err = c.Client.gateway().get()
@@ -90,15 +97,6 @@ func (c *Conn) Dial() (err error) {
 	// TODO Need to set read deadline for hello packet and I also need to set write deadlines.
 	// TODO also max message
 	c.wsConn, _, err = websocket.DefaultDialer.Dial(c.gatewayURL, nil)
-	if err != nil {
-		return err
-	}
-
-	if c.sessionID == "" {
-		err = c.identify()
-	} else {
-		err = c.resume()
-	}
 	if err != nil {
 		return err
 	}
@@ -129,6 +127,69 @@ type sentPayload struct {
 	Sequence  int         `json:"s,omitempty"`
 }
 
+// TODO What to do with error writes? Especially with Session Invalid Op?
+// TODO should I use some sort of queue to guarantee the event gets to discord in order? Not sure.
+func (c *Conn) writeLoop(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+
+	writesLeft := 120
+	var err error
+
+writeLoop:
+	for {
+		select {
+		case v := <-c.writeChan:
+			if writesLeft == 0 {
+				select {
+				case <-t.C:
+					writesLeft = 120
+				case <-ctx.Done():
+					break writeLoop
+				}
+			}
+
+			writesLeft--
+
+			_, ok := v.Data.(*dataOpIdentify)
+			if ok {
+				now := time.Now()
+				resetTime := c.lastIdentify.Add(5 * time.Second)
+				time.Sleep(resetTime.Sub(now))
+			}
+
+			err := c.wsConn.WriteJSON(v)
+			if err != nil {
+				log.Print(err)
+				select {
+				case c.reconnectChan <- struct{}{}:
+				case <-ctx.Done():
+				}
+				break writeLoop
+			}
+
+			if ok {
+				c.lastIdentify = time.Now()
+			}
+		case <-t.C:
+			writesLeft = 120
+		case <-ctx.Done():
+			break writeLoop
+		}
+	}
+
+	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
+	err = c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
+	if err != nil {
+		log.Print(err)
+	}
+
+	err = c.wsConn.Close()
+	if err != nil {
+		log.Print(err)
+	}
+}
+
 type dataOpIdentify struct {
 	Token          string             `json:"token"`
 	Properties     identifyProperties `json:"properties"`
@@ -142,7 +203,16 @@ type identifyProperties struct {
 	Device  string `json:"$device,omitempty"`
 }
 
-func (c *Conn) identify() error {
+func (c *Conn) write(ctx context.Context, p *sentPayload) {
+	select {
+	case c.writeChan <- p:
+	case <-ctx.Done():
+	}
+}
+
+func (c *Conn) identify(ctx context.Context) {
+	c.resuming = false
+
 	p := &sentPayload{
 		Operation: operationIdentify,
 		Data: dataOpIdentify{
@@ -155,7 +225,8 @@ func (c *Conn) identify() error {
 			LargeThreshold: 250,
 		},
 	}
-	return c.wsConn.WriteJSON(p)
+
+	c.write(ctx, p)
 }
 
 type dataOpResume struct {
@@ -164,8 +235,10 @@ type dataOpResume struct {
 	Seq       int    `json:"seq"`
 }
 
-func (c *Conn) resume() error {
-	c.mu.Lock()
+func (c *Conn) resume(ctx context.Context) {
+	c.resuming = true
+
+	c.heartbeatMu.Lock()
 	p := &sentPayload{
 		Operation: operationResume,
 		Data: dataOpResume{
@@ -174,35 +247,38 @@ func (c *Conn) resume() error {
 			Seq:       c.sequenceNumber,
 		},
 	}
-	c.mu.Unlock()
-	return c.wsConn.WriteJSON(p)
+	c.heartbeatMu.Unlock()
+	c.write(ctx, p)
 }
 
 func (c *Conn) manager() {
 	ctx, cancelFn := context.WithCancel(context.Background())
 	c.runWorker(func() {
+		c.writeLoop(ctx)
+	})
+	c.runWorker(func() {
 		c.readLoop(ctx)
 	})
+
+	if c.sessionID == "" {
+		c.identify(ctx)
+	} else {
+		c.resume(ctx)
+	}
+
 	select {
 	case <-c.reconnectChan:
 		cancelFn()
-		err := c.close()
-		if err != nil {
-			log.Print(err)
-		}
 		c.wg.Wait()
 
-		err = c.Dial()
+		err := c.Dial()
 		if err != nil {
 			log.Print(err)
 		}
 	case <-c.closeChan:
 		cancelFn()
-		err := c.close()
-		if err != nil {
-			log.Print(err)
-		}
 		c.wg.Wait()
+
 		c.closeChan <- struct{}{}
 	}
 }
@@ -311,20 +387,37 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 			c.heartbeatLoop(ctx, hello.HeartbeatInterval)
 		})
 	case operationHeartbeatACK:
-		c.mu.Lock()
+		c.heartbeatMu.Lock()
 		c.heartbeatAcknowledged = true
-		c.mu.Unlock()
+		c.heartbeatMu.Unlock()
 	case operationInvalidSession:
-		err := c.identify()
+		var resumable bool
+		err := json.Unmarshal(p.Data, &resumable)
 		if err != nil {
 			return err
 		}
+
+		if resumable {
+			c.resume(ctx)
+		} else {
+			// We reconnected and were trying to resume but we were too late.
+			if !c.ready && c.resuming {
+				// Sleep for a random amount of time between 1 and 5 seconds.
+				randDur := time.Duration(rand.Int63n(4*int64(time.Second))) + 1
+				time.Sleep(randDur)
+			}
+			c.identify(ctx)
+		}
+
 	case operationReconnect:
 		return errors.New("reconnect operation")
 	case operationDispatch:
-		c.mu.Lock()
+		c.ready = true
+		c.resuming = false
+
+		c.heartbeatMu.Lock()
 		c.sequenceNumber = p.SequenceNumber
-		c.mu.Unlock()
+		c.heartbeatMu.Unlock()
 
 		err := c.internalEventMux.route(ctx, c, p, true)
 		if err != nil {
@@ -342,11 +435,11 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 }
 
 func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
-	ticker := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
-	defer ticker.Stop()
+	t := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
+	defer t.Stop()
 	for {
 		select {
-		case <-ticker.C:
+		case <-t.C:
 			err := c.heartbeat()
 			if err != nil {
 				log.Print(err)
@@ -364,28 +457,17 @@ func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
 }
 
 func (c *Conn) heartbeat() error {
-	c.mu.Lock()
+	c.heartbeatMu.Lock()
 	if !c.heartbeatAcknowledged {
-		c.mu.Unlock()
+		c.heartbeatMu.Unlock()
 		return errors.New("heartbeat not acknowledged")
 	}
 	sequenceNumber := c.sequenceNumber
 	c.heartbeatAcknowledged = false
-	c.mu.Unlock()
+	c.heartbeatMu.Unlock()
 
 	p := &sentPayload{Operation: operationHeartbeat, Data: sequenceNumber}
 	return c.wsConn.WriteJSON(p)
-}
-
-func (c *Conn) close() error {
-	// TODO I think this should be OK, but I'm not sure. Should there be a writerLoop routine to sync writes?
-	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
-	err := c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
-	err2 := c.wsConn.Close()
-	if err != nil {
-		return err
-	}
-	return err2
 }
 
 func (c *Conn) Close() error {

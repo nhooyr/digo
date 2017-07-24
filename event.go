@@ -276,7 +276,7 @@ func (em eventMux) route(ctx context.Context, conn *Conn, p *receivedPayload, sy
 	if sync {
 		fn()
 	} else {
-		go fn()
+		conn.runWorker(fn)
 	}
 	return nil
 }

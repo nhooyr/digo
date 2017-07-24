@@ -21,7 +21,7 @@ func TestConn_Connect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 2)
 	conn.reconnectChan <- struct{}{}
 	select {}
 }
