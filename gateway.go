@@ -47,11 +47,12 @@ type Conn struct {
 	wg        sync.WaitGroup
 
 	lastIdentify time.Time
-	ready    bool
-	resuming bool
+	ready        bool
+	resuming     bool
 
 	reconnectChan chan struct{}
 
+	// TODO use other websocket package, it's better for my usecase.
 	wsConn    *websocket.Conn
 	writeChan chan *sentPayload
 
@@ -70,6 +71,7 @@ func NewConn() *Conn {
 		EventMux:         newEventMux(),
 		closeChan:        make(chan struct{}),
 		reconnectChan:    make(chan struct{}),
+		writeChan:        make(chan *sentPayload),
 		ready:            true,
 	}
 }
@@ -83,6 +85,7 @@ func (c *Conn) Dial() (err error) {
 	}
 
 	c.ready = false
+	c.resuming = false
 	c.heartbeatAcknowledged = true
 	c.lastIdentify = time.Time{}
 
@@ -139,7 +142,7 @@ func (c *Conn) writeLoop(ctx context.Context) {
 writeLoop:
 	for {
 		select {
-		case v := <-c.writeChan:
+		case p := <-c.writeChan:
 			if writesLeft == 0 {
 				select {
 				case <-t.C:
@@ -151,14 +154,14 @@ writeLoop:
 
 			writesLeft--
 
-			_, ok := v.Data.(*dataOpIdentify)
+			_, ok := p.Data.(*dataOpIdentify)
 			if ok {
 				now := time.Now()
 				resetTime := c.lastIdentify.Add(5 * time.Second)
 				time.Sleep(resetTime.Sub(now))
 			}
 
-			err := c.wsConn.WriteJSON(v)
+			err := c.wsConn.WriteJSON(p)
 			if err != nil {
 				log.Print(err)
 				select {
@@ -211,8 +214,6 @@ func (c *Conn) write(ctx context.Context, p *sentPayload) {
 }
 
 func (c *Conn) identify(ctx context.Context) {
-	c.resuming = false
-
 	p := &sentPayload{
 		Operation: operationIdentify,
 		Data: dataOpIdentify{
@@ -400,7 +401,12 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 		if resumable {
 			c.resume(ctx)
 		} else {
-			// We reconnected and were trying to resume but we were too late.
+			// We closed the connection and tried resuming but were too late.
+			// If c.ready, the connection was not closed prior to resuming but rather we are
+			// responding to our active session becoming expired and it turns out we were too late
+			// to resume. In that case, we do not need to wait the random duration to stagger reconnects because
+			// it won't help and we're not reconnecting. If we were too late to resume, it's safe to the gateway is
+			// not under crazy load.
 			if !c.ready && c.resuming {
 				// Sleep for a random amount of time between 1 and 5 seconds.
 				randDur := time.Duration(rand.Int63n(4*int64(time.Second))) + 1
