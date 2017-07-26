@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"sync"
 )
 
 type eventReady struct {
 	V               int             `json:"v"`
 	User            *ModelUser      `json:"user"`
 	PrivateChannels []*ModelChannel `json:"private_channels"`
+	Guilds          []*ModelGuild   `json:"guilds"`
 	SessionID       string          `json:"session_id"`
 	Trace           []string        `json:"_trace"`
 }
@@ -159,7 +161,7 @@ type ModelGame struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	ModelGameTypeGame = iota
+	ModelGameTypeGame      = iota
 	ModelGameTypeStreaming
 )
 
@@ -279,4 +281,181 @@ func (em eventMux) route(ctx context.Context, conn *Conn, p *receivedPayload, sy
 		conn.runWorker(fn)
 	}
 	return nil
+}
+
+type State struct {
+	sync.RWMutex
+
+	user       *ModelUser
+	dmChannels map[string]*ModelChannel
+
+	guildMap   map[string]*ModelGuild
+	channelMap map[string]*ModelChannel
+}
+
+func (s *State) registerEventHandlers(em *eventMux) {
+	em.Register(s.ready)
+	em.Register(s.createChannel)
+}
+
+func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) {
+	s.Lock()
+	defer s.Unlock()
+	s.user = e.User
+	for _, c := range e.PrivateChannels {
+		s.dmChannels[c.ID] = c
+	}
+}
+
+func (s *State) insertChannel(c *ModelChannel) {
+	s.Lock()
+	defer s.Unlock()
+	if c.Type == ModelChannelTypeDM || c.Type == ModelChannelTypeGroupDM {
+		s.dmChannels[c.ID] = c
+	} else {
+		g, ok := s.guildMap[*c.GuildID]
+		if !ok {
+			// TODO on panics, print out the associated event.
+			panic("a channel created for an unknown guild")
+		}
+		*g.Channels = append(*g.Channels, c)
+	}
+}
+
+func (s *State) createChannel(ctx context.Context, conn *Conn, e *EventChannelCreate) {
+	s.insertChannel(&e.ModelChannel)
+}
+
+func (s *State) updateChannel(ctx context.Context, conn *Conn, e *EventChannelUpdate) {
+	s.insertChannel(&e.ModelChannel)
+}
+
+func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
+		s.dmChannels = append(s.dmChannels, c)
+	} else {
+		g, ok := s.guildMap[*c.GuildID]
+		if !ok {
+			// TODO on panics, print out the associated event.
+			panic("a channel created for an unknown guild")
+		}
+		*g.Channels = append(*g.Channels, c)
+	}
+}
+
+func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) addGuildBan(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberAdd) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) chunkGuildMembers(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) createGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updateGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) deleteGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) createMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) bulkDeleteMessages(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) startTyping(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updateUser(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updateVoiceState(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+}
+
+func (s *State) updateVoiceServer(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
 }

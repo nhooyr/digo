@@ -7,23 +7,23 @@ import (
 )
 
 type ModelGuild struct {
-	ID                          string             `json:"id"`
-	Name                        string             `json:"name"`
-	Icon                        string             `json:"icon"`
-	Splash                      string             `json:"splash"`
-	OwnerID                     string             `json:"owner_id"`
-	Region                      string             `json:"region"`
-	AFKChannelID                string             `json:"afk_channel_id"`
-	AFKTimeout                  int                `json:"afk_timeout"`
-	EmbedEnabled                bool               `json:"embed_enabled"`
-	EmbedChannelID              string             `json:"embed_channel_id"`
-	VerificationLevel           int                `json:"verification_level"`
-	DefaultMessageNotifications int                `json:"default_message_notifications"`
-	Roles                       []*ModelRole       `json:"roles"`
-	Emojis                      []*ModelGuildEmoji `json:"emojis"`
-	Features                    []string           `json:"features"` // not sure if this is right, DiscordGo doesn't have anything
-	MFALevel                    int                `json:"mfa_level"`
-	JoinedAt                    time.Time          `json:"joined_at"`
+	ID                              string             `json:"id"`
+	Name                            string             `json:"name"`
+	Icon                            string             `json:"icon"`
+	Splash                          string             `json:"splash"`
+	OwnerID                         string             `json:"owner_id"`
+	Region                          string             `json:"region"`
+	AFKChannelID                    string             `json:"afk_channel_id"`
+	AFKTimeout                      int                `json:"afk_timeout"`
+	EmbedEnabled                    bool               `json:"embed_enabled"`
+	EmbedChannelID                  string             `json:"embed_channel_id"`
+	VerificationLevel               int                `json:"verification_level"`
+	DefaultMessageNotificationLevel int                `json:"default_message_notifications"`
+	Roles                           []*ModelRole       `json:"roles"`
+	Emojis                          []*ModelGuildEmoji `json:"emojis"`
+	Features                        []string           `json:"features"` // not sure if this is right, DiscordGo doesn't have anything
+	MFALevel                        int                `json:"mfa_level"`
+	JoinedAt                        time.Time          `json:"joined_at"`
 
 	// These fields are only sent within the GUILD_CREATE event
 	Large       *bool                `json:"large"`
@@ -35,15 +35,34 @@ type ModelGuild struct {
 	Presences   *[]*ModelPresence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
 }
 
+const (
+	LevelMessageNotificationAllMessages = iota
+	LevelMessageNotificationOnlyMentions
+)
+
+const (
+	LevelExplicitContentFilterDisabled = iota
+	LevelExplicitContentFilterMembersWithoutRoles
+	LevelExplicitContentFilterAllMembers
+)
+
+const (
+	LevelMFANone = iota
+	LevelMFAElevated
+)
+
+const (
+	LevelVerificationNone = iota
+	LevelVerificationLow
+	LevelVerificationMedium
+	LevelVerificationHigh
+	LevelVerificationVeryHigh
+)
+
 type ModelPresence struct {
 	User   *ModelUser `json:"user"`
 	Game   *ModelGame `json:"game"`
 	Status string     `json:"status"`
-}
-
-type ModelUnavailableGuild struct {
-	ID          string `json:"id"`
-	Unavailable bool   `json:"unavailable"`
 }
 
 type ModelGuildEmbed struct {

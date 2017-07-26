@@ -110,7 +110,7 @@ func (c *Conn) Dial() (err error) {
 }
 
 const (
-	operationDispatch            = iota
+	operationDispatch = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate

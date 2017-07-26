@@ -35,12 +35,14 @@ type ModelChannel struct {
 	Icon                 *string                      `json:"icon"`
 	OwnerID              *string                      `json:"owner_id"`
 	ApplicationID        *string                      `json:"application_id"`
+
+	Messages []*ModelMessage `json:"-"`
 }
 
 type channelType int
 
 const (
-	ModelChannelTypeGuildText = iota
+	ModelChannelTypeGuildText channelType = iota
 	ModelChannelTypeDM
 	ModelChannelTypeGuildVoice
 	ModelChannelTypeGroupDM
