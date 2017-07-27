@@ -13,7 +13,7 @@ type State struct {
 	eventMux  EventMux
 
 	// TODO seperate mutex for guilds map, channels map etc?
-	mu sync.RWMutex
+	mu         sync.RWMutex
 	user       *ModelUser
 	dmChannels map[string]*StateChannel
 	guilds     map[string]*StateGuild
@@ -204,6 +204,8 @@ type StateChannel struct {
 }
 
 func (sc *StateChannel) ID() string {
+	// It's immutable for sure but I'm doing this anyway because I'm gonna replace
+	// the entire ModelGuild pointer with another on a GuildUpdate event.
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
 	return sc.c.ID
@@ -328,49 +330,67 @@ func (s *State) insertChannel(c *ModelChannel) error {
 	sc := &StateChannel{c: c}
 
 	s.mu.Lock()
+
 	if c.Type == ModelChannelTypeDM || c.Type == ModelChannelTypeGroupDM {
 		s.dmChannels[c.ID] = sc
 		s.mu.Unlock()
-	} else {
-		s.channels[c.ID] = sc
-		g, ok := s.guilds[c.GuildID]
-		s.mu.Unlock()
-
-		if !ok {
-			return errors.New("a channel created for an unknown guild")
-		}
-
-		sc.mu.Lock()
-		sc.guild = g
-		sc.mu.Unlock()
-
-		g.mu.Lock()
-		g.channels = append(g.channels, sc)
-		g.mu.Unlock()
+		return nil
 	}
+
+	s.channels[c.ID] = sc
+	g, ok := s.guilds[c.GuildID]
+	s.mu.Unlock()
+
+	if !ok {
+		return errors.New("a channel created for an unknown guild")
+	}
+
+	sc.mu.Lock()
+	sc.guild = g
+	sc.mu.Unlock()
+
+	g.mu.Lock()
+	g.channels = append(g.channels, sc)
+	g.mu.Unlock()
+
 	return nil
 }
 
 func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDelete) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
 		delete(s.dmChannels, e.ID)
-	} else {
-		delete(s.channels, e.ID)
+		s.mu.Unlock()
+		return nil
+	}
 
-		g, ok := s.guilds[*e.GuildID]
-		if !ok {
-			return errors.New("a channel deleted for an unknown guild")
-		}
-		for i, c := range g.Channels {
-			if c.ID == e.ID {
-				g.Channels = append(g.Channels[:i], g.Channels[i+1:]...)
-				break
-			}
+	delete(s.channels, e.ID)
+	g, ok := s.guilds[e.GuildID]
+	s.mu.Unlock()
+
+	if !ok {
+		return errors.New("a channel deleted for an unknown guild")
+	}
+
+	i := -1
+	g.mu.RLock()
+	for j, c := range g.channels {
+		if c.ID() == e.ID {
+			i = j
+			break
 		}
 	}
+	g.mu.RUnlock()
+
+	if i == -1 {
+		return errors.New("channel removed from a guild where it never existed?")
+	}
+
+	g.mu.Lock()
+	g.channels = append(g.channels[:i], g.channels[i+1:]...)
+	g.mu.Unlock()
+	return nil
 }
 
 var errHandled = errors.New("no need to handle the event further")
