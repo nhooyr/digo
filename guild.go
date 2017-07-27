@@ -27,23 +27,23 @@ type ModelGuild struct {
 }
 
 const (
-	LevelMessageNotificationAllMessages  = iota
+	LevelMessageNotificationAllMessages = iota
 	LevelMessageNotificationOnlyMentions
 )
 
 const (
-	LevelExplicitContentFilterDisabled            = iota
+	LevelExplicitContentFilterDisabled = iota
 	LevelExplicitContentFilterMembersWithoutRoles
 	LevelExplicitContentFilterAllMembers
 )
 
 const (
-	LevelMFANone     = iota
+	LevelMFANone = iota
 	LevelMFAElevated
 )
 
 const (
-	LevelVerificationNone     = iota
+	LevelVerificationNone = iota
 	LevelVerificationLow
 	LevelVerificationMedium
 	LevelVerificationHigh

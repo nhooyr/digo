@@ -36,8 +36,9 @@ func newState() *State {
 type StateGuild struct {
 	mu sync.RWMutex
 	// Odd struct indeed but oh well.
-	g        *EventGuildCreate
-	channels map[string]*StateChannel
+	g *EventGuildCreate
+	// TODO maybe a map?
+	channels []*StateChannel
 }
 
 func (s *StateGuild) ID() string {
@@ -174,6 +175,14 @@ func (s *StateGuild) Members() []*ModelGuildMember {
 	return members
 }
 
+func (s *StateGuild) Channels() []*StateChannel {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	channels := make([]*StateChannel, len(s.channels))
+	copy(channels, s.channels)
+	return channels
+}
+
 func (s *StateGuild) Presences() []*ModelPresence {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -186,6 +195,90 @@ type StateChannel struct {
 	mu       sync.RWMutex
 	c        *ModelChannel
 	messages []*ModelMessage
+}
+
+func (s *StateChannel) ID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.ID
+}
+
+func (s *StateChannel) Type() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.Type
+}
+
+func (s *StateChannel) GuildID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.GuildID
+}
+
+func (s *StateChannel) Position() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.Position
+}
+
+func (s *StateChannel) PermissionOverwrites() []*ModelPermissionOverwrite {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.PermissionOverwrites
+}
+
+func (s *StateChannel) Name() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.Name
+}
+
+func (s *StateChannel) Topic() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.Topic
+}
+
+func (s *StateChannel) LastMessageID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.LastMessageID
+}
+
+func (s *StateChannel) Bitrate() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.Bitrate
+}
+
+func (s *StateChannel) UserLimit() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.UserLimit
+}
+
+func (s *StateChannel) Recipients() []*ModelUser {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.Recipients
+}
+
+func (s *StateChannel) Icon() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.Icon
+}
+
+func (s *StateChannel) OwnerID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.OwnerID
+}
+
+func (s *StateChannel) ApplicationID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.c.ApplicationID
 }
 
 func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {

@@ -18,23 +18,23 @@ import (
 
 // ModelChannel represents a channel in Discord.
 type ModelChannel struct {
-	ID   string `json:"id"`
-	Type int    `json:"type"`
+	ID                   string                      `json:"id"`
+	Type                 int                         `json:"type"`
 
-	// All of these may be null. They are pointers so that consumer's
-	// of the package will be reminded that they may be null.
-	GuildID              *string                     `json:"guild_id"`
-	Position             *int                        `json:"position"`
+	// Any of these may be null. Not sure which to make pointers and which
+	// can be null based on the type of the channel.
+	GuildID              string                      `json:"guild_id"`
+	Position             int                         `json:"position"`
 	PermissionOverwrites []*ModelPermissionOverwrite `json:"permission_overwrites"`
-	Name                 *string                     `json:"name"`
-	Topic                *string                     `json:"topic"`
-	LastMessageID        *string                     `json:"last_message_id"`
-	Bitrate              *int                        `json:"bitrate"`
-	UserLimit            *int                        `json:"user_limit"`
+	Name                 string                      `json:"name"`
+	Topic                string                      `json:"topic"`
+	LastMessageID        string                      `json:"last_message_id"`
+	Bitrate              int                         `json:"bitrate"`
+	UserLimit            int                         `json:"user_limit"`
 	Recipients           []*ModelUser                `json:"recipients"`
-	Icon                 *string                     `json:"icon"`
-	OwnerID              *string                     `json:"owner_id"`
-	ApplicationID        *string                     `json:"application_id"`
+	Icon                 string                      `json:"icon"`
+	OwnerID              string                      `json:"owner_id"`
+	ApplicationID        string                      `json:"application_id"`
 }
 
 const (
