@@ -8,12 +8,12 @@ import (
 )
 
 type eventReady struct {
-	V               int             `json:"v"`
-	User            *ModelUser      `json:"user"`
-	PrivateChannels []*ModelChannel `json:"private_channels"`
-	Guilds          []*ModelGuild   `json:"guilds"`
-	SessionID       string          `json:"session_id"`
-	Trace           []string        `json:"_trace"`
+	V               int                 `json:"v"`
+	User            *ModelUser          `json:"user"`
+	PrivateChannels []*ModelChannel     `json:"private_channels"`
+	Guilds          []*EventGuildCreate `json:"guilds"`
+	SessionID       string              `json:"session_id"`
+	Trace           []string            `json:"_trace"`
 }
 
 type eventResumed struct {
@@ -40,7 +40,7 @@ type EventGuildCreate struct {
 	VoiceStates []*ModelVoiceState  `json:"voice_states"` // without guild_id key
 	Members     []*ModelGuildMember `json:"members"`
 	Channels    []*ModelChannel     `json:"channels"`
-	Presences   []*ModelPresence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
+	Presences   []*ModelPresence    `json:"presences"`
 }
 
 type EventGuildUpdate struct {

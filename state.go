@@ -12,19 +12,20 @@ type State struct {
 	sessionID string
 	eventMux  EventMux
 
-	sync.RWMutex
+	// TODO seperate mutex for guilds map, channels map etc?
+	mu sync.RWMutex
 	user       *ModelUser
-	dmChannels map[string]*ModelChannel
-	guilds     map[string]*ModelGuild
-	channels   map[string]*ModelChannel
+	dmChannels map[string]*StateChannel
+	guilds     map[string]*StateGuild
+	channels   map[string]*StateChannel
 }
 
 func newState() *State {
 	s := &State{
 		eventMux:   newEventMux(),
-		dmChannels: make(map[string]*ModelChannel),
-		guilds:     make(map[string]*ModelGuild),
-		channels:   make(map[string]*ModelChannel),
+		dmChannels: make(map[string]*StateChannel),
+		guilds:     make(map[string]*StateGuild),
+		channels:   make(map[string]*StateChannel),
 	}
 
 	s.eventMux.Register(s.ready)
@@ -34,160 +35,164 @@ func newState() *State {
 }
 
 type StateGuild struct {
-	mu sync.RWMutex
-	// Odd struct indeed but oh well.
-	g *EventGuildCreate
-	// TODO maybe a map?
-	channels []*StateChannel
+	mu          sync.RWMutex
+	g           *ModelGuild
+	large       bool
+	unavailable bool
+	memberCount int
+	voiceStates []*ModelVoiceState
+	members     []*ModelGuildMember
+	channels    []*StateChannel
+	presences   []*ModelPresence
 }
 
-func (s *StateGuild) ID() string {
+func (sg *StateGuild) ID() string {
 	// It's immutable for sure but I'm doing this anyway because I'm gonna replace
 	// the entire ModelGuild pointer with another on a GuildUpdate event.
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.ID
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.ID
 }
 
-func (s *StateGuild) Name() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.Name
+func (sg *StateGuild) Name() string {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.Name
 }
 
-func (s *StateGuild) Icon() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.Icon
+func (sg *StateGuild) Icon() string {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.Icon
 }
 
-func (s *StateGuild) Splash() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.Splash
+func (sg *StateGuild) Splash() string {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.Splash
 }
 
-func (s *StateGuild) OwnerID() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.OwnerID
+func (sg *StateGuild) OwnerID() string {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.OwnerID
 }
 
-func (s *StateGuild) Region() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.Region
+func (sg *StateGuild) Region() string {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.Region
 }
 
-func (s *StateGuild) AFKChannelID() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.AFKChannelID
+func (sg *StateGuild) AFKChannelID() string {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.AFKChannelID
 }
 
-func (s *StateGuild) AFKTimeout() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.AFKTimeout
+func (sg *StateGuild) AFKTimeout() int {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.AFKTimeout
 }
 
-func (s *StateGuild) EmbedEnabled() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.EmbedEnabled
+func (sg *StateGuild) EmbedEnabled() bool {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.EmbedEnabled
 }
 
-func (s *StateGuild) EmbedChannelID() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.EmbedChannelID
+func (sg *StateGuild) EmbedChannelID() string {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.EmbedChannelID
 }
 
-func (s *StateGuild) VerificationLevel() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.VerificationLevel
+func (sg *StateGuild) VerificationLevel() int {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.VerificationLevel
 }
 
-func (s *StateGuild) DefaultMessageNotificationLevel() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.DefaultMessageNotificationLevel
+func (sg *StateGuild) DefaultMessageNotificationLevel() int {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.DefaultMessageNotificationLevel
 }
 
-func (s *StateGuild) Roles() []*ModelRole {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	roles := make([]*ModelRole, len(s.g.Roles))
-	copy(roles, s.g.Roles)
+func (sg *StateGuild) Roles() []*ModelRole {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	roles := make([]*ModelRole, len(sg.g.Roles))
+	copy(roles, sg.g.Roles)
 	return roles
 }
 
-func (s *StateGuild) Emojis() []*ModelGuildEmoji {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.Emojis
+func (sg *StateGuild) Emojis() []*ModelGuildEmoji {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.Emojis
 }
 
-func (s *StateGuild) Features() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.Features
+func (sg *StateGuild) Features() []string {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.Features
 }
 
-func (s *StateGuild) MFALevel() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.MFALevel
+func (sg *StateGuild) MFALevel() int {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.MFALevel
 }
 
-func (s *StateGuild) JoinedAt() time.Time {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.JoinedAt
+func (sg *StateGuild) JoinedAt() time.Time {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.g.JoinedAt
 }
 
-func (s *StateGuild) Large() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.Large
+func (sg *StateGuild) Large() bool {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.large
 }
 
-func (s *StateGuild) MemberCount() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.g.MemberCount
+func (sg *StateGuild) MemberCount() int {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.memberCount
 }
 
-func (s *StateGuild) VoiceStates() []*ModelVoiceState {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	voiceStates := make([]*ModelVoiceState, len(s.g.VoiceStates))
-	copy(voiceStates, s.g.VoiceStates)
+func (sg *StateGuild) VoiceStates() []*ModelVoiceState {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	voiceStates := make([]*ModelVoiceState, len(sg.voiceStates))
+	copy(voiceStates, sg.voiceStates)
 	return voiceStates
 }
 
-func (s *StateGuild) Members() []*ModelGuildMember {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	members := make([]*ModelGuildMember, len(s.g.Members))
-	copy(members, s.g.Members)
+func (sg *StateGuild) Members() []*ModelGuildMember {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	members := make([]*ModelGuildMember, len(sg.members))
+	copy(members, sg.members)
 	return members
 }
 
-func (s *StateGuild) Channels() []*StateChannel {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	channels := make([]*StateChannel, len(s.channels))
-	copy(channels, s.channels)
+func (sg *StateGuild) Channels() []*StateChannel {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	channels := make([]*StateChannel, len(sg.channels))
+	copy(channels, sg.channels)
 	return channels
 }
 
-func (s *StateGuild) Presences() []*ModelPresence {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	presences := make([]*ModelPresence, len(s.g.Presences))
-	copy(presences, s.g.Presences)
+func (sg *StateGuild) Presences() []*ModelPresence {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	presences := make([]*ModelPresence, len(sg.presences))
+	copy(presences, sg.presences)
 	return presences
 }
 
@@ -198,100 +203,100 @@ type StateChannel struct {
 	messages []*ModelMessage
 }
 
-func (s *StateChannel) ID() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.ID
+func (sc *StateChannel) ID() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.ID
 }
 
-func (s *StateChannel) Type() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.Type
+func (sc *StateChannel) Type() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.Type
 }
 
-func (s *StateChannel) Guild() *StateGuild {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.guild
+func (sc *StateChannel) Guild() *StateGuild {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.guild
 }
 
-func (s *StateChannel) Position() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.Position
+func (sc *StateChannel) Position() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.Position
 }
 
-func (s *StateChannel) PermissionOverwrites() []*ModelPermissionOverwrite {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	permissionOverwrites := make([]*ModelPermissionOverwrite, len(s.c.PermissionOverwrites))
-	copy(permissionOverwrites, s.c.PermissionOverwrites)
+func (sc *StateChannel) PermissionOverwrites() []*ModelPermissionOverwrite {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	permissionOverwrites := make([]*ModelPermissionOverwrite, len(sc.c.PermissionOverwrites))
+	copy(permissionOverwrites, sc.c.PermissionOverwrites)
 	return permissionOverwrites
 }
 
-func (s *StateChannel) Name() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.Name
+func (sc *StateChannel) Name() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.Name
 }
 
-func (s *StateChannel) Topic() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.Topic
+func (sc *StateChannel) Topic() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.Topic
 }
 
-func (s *StateChannel) LastMessageID() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.LastMessageID
+func (sc *StateChannel) LastMessageID() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.LastMessageID
 }
 
-func (s *StateChannel) Bitrate() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.Bitrate
+func (sc *StateChannel) Bitrate() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.Bitrate
 }
 
-func (s *StateChannel) UserLimit() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.UserLimit
+func (sc *StateChannel) UserLimit() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.UserLimit
 }
 
-func (s *StateChannel) Recipients() []*ModelUser {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	recipients := make([]*ModelUser, len(s.c.Recipients))
-	copy(recipients, s.c.Recipients)
+func (sc *StateChannel) Recipients() []*ModelUser {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	recipients := make([]*ModelUser, len(sc.c.Recipients))
+	copy(recipients, sc.c.Recipients)
 	return recipients
 }
 
-func (s *StateChannel) Icon() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.Icon
+func (sc *StateChannel) Icon() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.Icon
 }
 
-func (s *StateChannel) OwnerID() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.OwnerID
+func (sc *StateChannel) OwnerID() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.OwnerID
 }
 
-func (s *StateChannel) ApplicationID() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.c.ApplicationID
+func (sc *StateChannel) ApplicationID() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.c.ApplicationID
 }
 
-// Last message is the most recent.
-func (s *StateChannel) Messages() []*ModelMessage {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	messages := make([]*ModelMessage, len(s.messages))
-	copy(messages, s.messages)
+// Messages returns a copy of the current messages. The last message is the most recent.
+func (sc *StateChannel) Messages() []*ModelMessage {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	messages := make([]*ModelMessage, len(sc.messages))
+	copy(messages, sc.messages)
 	return messages
 }
 
@@ -299,14 +304,14 @@ func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {
 	// Access to this is serialized by the Conn goroutines so we don't need to protect it.
 	s.sessionID = e.SessionID
 
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.user = e.User
 	for _, c := range e.PrivateChannels {
-		s.dmChannels[c.ID] = c
+		s.dmChannels[c.ID] = &StateChannel{c: c}
 	}
-	for _, g := range e.Guilds {
-		s.guilds[g.ID] = g
+	for _, ee := range e.Guilds {
+		s.guilds[ee.ID] = &StateGuild{g: &ee.ModelGuild, unavailable: ee.Unavailable}
 	}
 	return nil
 }
@@ -320,26 +325,35 @@ func (s *State) updateChannel(ctx context.Context, conn *Conn, e *EventChannelUp
 }
 
 func (s *State) insertChannel(c *ModelChannel) error {
-	s.Lock()
-	defer s.Unlock()
+	sc := &StateChannel{c: c}
 
+	s.mu.Lock()
 	if c.Type == ModelChannelTypeDM || c.Type == ModelChannelTypeGroupDM {
-		s.dmChannels[c.ID] = c
+		s.dmChannels[c.ID] = sc
+		s.mu.Unlock()
 	} else {
-		s.channels[c.ID] = c
+		s.channels[c.ID] = sc
+		g, ok := s.guilds[c.GuildID]
+		s.mu.Unlock()
 
-		g, ok := s.guilds[*c.GuildID]
 		if !ok {
 			return errors.New("a channel created for an unknown guild")
 		}
-		g.Channels = append(g.Channels, c)
+
+		sc.mu.Lock()
+		sc.guild = g
+		sc.mu.Unlock()
+
+		g.mu.Lock()
+		g.channels = append(g.channels, sc)
+		g.mu.Unlock()
 	}
 	return nil
 }
 
 func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDelete) error {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
 		delete(s.dmChannels, e.ID)
@@ -362,117 +376,117 @@ func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDe
 var errHandled = errors.New("no need to handle the event further")
 
 func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate) error {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return nil
 }
 
 func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) addGuildBan(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberAdd) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) chunkGuildMembers(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) createGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) updateGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) deleteGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) createMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) bulkDeleteMessages(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) startTyping(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) updateUser(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) updateVoiceState(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *State) updateVoiceServer(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
