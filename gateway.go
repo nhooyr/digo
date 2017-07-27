@@ -15,7 +15,6 @@ import (
 	"math/rand"
 
 	"github.com/gorilla/websocket"
-	"github.com/nhooyr/log"
 )
 
 type endpointGateway struct {
@@ -35,13 +34,14 @@ func (g endpointGateway) get() (url string, err error) {
 }
 
 type Conn struct {
-	Client   *Client
-	EventMux eventMux
+	Client *Client
+	State  *State
 
-	internalEventMux eventMux
-	gatewayURL       string
+	eventMux EventMux
+	errorHandler     func(err error)
+	logf             func(format string, v ...interface{})
 
-	sessionID string
+	gatewayURL string
 
 	closeChan chan struct{}
 	wg        sync.WaitGroup
@@ -61,25 +61,32 @@ type Conn struct {
 	sequenceNumber        int
 }
 
-func NewConn() *Conn {
-	internalEventMux := newEventMux()
-	internalEventMux.Register(func(ctx context.Context, conn *Conn, e *eventReady) {
-		conn.sessionID = e.SessionID
-	})
-	return &Conn{
-		internalEventMux: internalEventMux,
-		EventMux:         newEventMux(),
+type DialConfig struct {
+	Client       *Client
+	EventMux     EventMux
+	ErrorHandler func(err error)
+	Logf         func(format string, v ...interface{})
+}
+
+func Dial(config *DialConfig) (*Conn, error) {
+	c := &Conn{
+		Client:           config.Client,
+		eventMux: config.EventMux,
+		errorHandler:     config.ErrorHandler,
+		logf:             config.Logf,
+
 		closeChan:        make(chan struct{}),
 		reconnectChan:    make(chan struct{}),
 		writeChan:        make(chan *sentPayload),
 		ready:            true,
 	}
+	return c, c.dial()
 }
 
 // TODO maybe take context.Context? though I doubt it's necessary
 // If it errors without receiving a operationDispatch payload, then
 // this method will always return an error.
-func (c *Conn) Dial() (err error) {
+func (c *Conn) dial() (err error) {
 	if !c.ready {
 		return errors.New("already tried to connect and failed")
 	}
@@ -110,7 +117,7 @@ func (c *Conn) Dial() (err error) {
 }
 
 const (
-	operationDispatch = iota
+	operationDispatch            = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -130,8 +137,6 @@ type sentPayload struct {
 	Sequence  int         `json:"s,omitempty"`
 }
 
-// TODO What to do with error writes? Especially with Session Invalid Op?
-// TODO should I use some sort of queue to guarantee the event gets to discord in order? Not sure.
 func (c *Conn) writeLoop(ctx context.Context) {
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
@@ -163,7 +168,7 @@ writeLoop:
 
 			err := c.wsConn.WriteJSON(p)
 			if err != nil {
-				log.Print(err)
+				c.log(err)
 				select {
 				case c.reconnectChan <- struct{}{}:
 				case <-ctx.Done():
@@ -184,12 +189,12 @@ writeLoop:
 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
 	err = c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
 	if err != nil {
-		log.Print(err)
+		c.log(err)
 	}
 
 	err = c.wsConn.Close()
 	if err != nil {
-		log.Print(err)
+		c.log(err)
 	}
 }
 
@@ -244,7 +249,7 @@ func (c *Conn) resume(ctx context.Context) {
 		Operation: operationResume,
 		Data: dataOpResume{
 			Token:     c.Client.Token,
-			SessionID: c.sessionID,
+			SessionID: c.State.sessionID,
 			Seq:       c.sequenceNumber,
 		},
 	}
@@ -261,7 +266,7 @@ func (c *Conn) manager() {
 		c.readLoop(ctx)
 	})
 
-	if c.sessionID == "" {
+	if c.State.sessionID == "" {
 		c.identify(ctx)
 	} else {
 		c.resume(ctx)
@@ -272,9 +277,9 @@ func (c *Conn) manager() {
 		cancelFn()
 		c.wg.Wait()
 
-		err := c.Dial()
+		err := c.dial()
 		if err != nil {
-			log.Print(err)
+			c.log(err)
 		}
 	case <-c.closeChan:
 		cancelFn()
@@ -304,7 +309,7 @@ func (c *Conn) readLoop(ctx context.Context) {
 		p, err := c.readPayload()
 		if err != nil {
 			if !isUseOfClosedError(err) {
-				log.Print(err)
+				c.log(err)
 				// It's possible we're being shutdown right now too.
 				// Or maybe manager is already trying to reconnect.
 				select {
@@ -315,17 +320,17 @@ func (c *Conn) readLoop(ctx context.Context) {
 			return
 		}
 
-		log.Print(p.Operation)
+		c.log(p.Operation)
 		if p.Type != "" {
-			log.Print(p.Type)
+			c.log(p.Type)
 		}
-		log.Print(p.SequenceNumber)
-		log.Printf("%s", p.Data)
-		log.Print()
+		c.log(p.SequenceNumber)
+		c.logf("%s", p.Data)
+		c.log("\n")
 
 		err = c.onPayload(ctx, p)
 		if err != nil {
-			log.Print(err)
+			c.log(err)
 			// It's possible we're being shutdown right now.
 			// Or maybe manager is already trying to reconnect.
 			select {
@@ -425,12 +430,22 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 		c.sequenceNumber = p.SequenceNumber
 		c.heartbeatMu.Unlock()
 
-		err := c.internalEventMux.route(ctx, c, p, true)
+		fn, err := c.State.eventMux.getHandler(ctx, c, p)
 		if err != nil {
 			return err
 		}
 
-		err = c.EventMux.route(ctx, c, p, false)
+		err := fn()
+		if err != nil {
+			return nil
+		}
+
+		conn.runWorker(func() {
+			err := fn()
+
+		})
+
+		err = c.externalEventMux.route(ctx, c, p, false)
 		if err != nil {
 			return err
 		}
@@ -448,7 +463,7 @@ func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
 		case <-t.C:
 			err := c.heartbeat()
 			if err != nil {
-				log.Print(err)
+				c.log(err)
 				// Either we signal a reconnect or we have been signaled to close.
 				select {
 				case c.reconnectChan <- struct{}{}:
@@ -480,4 +495,8 @@ func (c *Conn) Close() error {
 	c.closeChan <- struct{}{}
 	<-c.closeChan
 	return nil
+}
+
+func (c *Conn) log(v interface{}) {
+	c.logf("%v", v)
 }

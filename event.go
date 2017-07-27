@@ -3,6 +3,7 @@ package discgo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"sync"
 )
@@ -161,7 +162,7 @@ type ModelGame struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	ModelGameTypeGame = iota
+	ModelGameTypeGame      = iota
 	ModelGameTypeStreaming
 )
 
@@ -185,137 +186,169 @@ type eventVoiceServerUpdate struct {
 	Endpoint string `json:"endpoint"`
 }
 
-type eventMux map[string]interface{}
-
-func newEventMux() eventMux {
-	return make(eventMux)
+type EventHandlerError struct {
+	Err       error
+	Event     interface{}
+	EventName string
 }
 
-func (em eventMux) Register(fn interface{}) {
+func (e *EventHandlerError) Error() string {
+	eventJSON, err := json.MarshalIndent(e.Event, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%v handler error: %v\nevent: %v", e.EventName, e.Err, eventJSON)
+}
+
+type EventMux map[string]interface{}
+
+func NewEventMux() EventMux {
+	return make(map[string]interface{})
+}
+
+func (em EventMux) Register(fn interface{}) {
 	switch fn.(type) {
-	case func(ctx context.Context, conn *Conn, e *eventReady):
+	case func(ctx context.Context, conn *Conn, e *eventReady) error:
 		em["READY"] = fn
-	case func(ctx context.Context, conn *Conn, e *eventResumed):
+	case func(ctx context.Context, conn *Conn, e *eventResumed) error:
 		em["RESUMED"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventChannelCreate):
+	case func(ctx context.Context, conn *Conn, e *EventChannelCreate) error:
 		em["CHANNEL_CREATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventChannelUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventChannelUpdate) error:
 		em["CHANNEL_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventChannelDelete):
+	case func(ctx context.Context, conn *Conn, e *EventChannelDelete) error:
 		em["CHANNEL_DELETE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildCreate):
+	case func(ctx context.Context, conn *Conn, e *EventGuildCreate) error:
 		em["GUILD_CREATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventGuildUpdate) error:
 		em["GUILD_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildDelete):
+	case func(ctx context.Context, conn *Conn, e *EventGuildDelete) error:
 		em["GUILD_DELETE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildBanAdd):
+	case func(ctx context.Context, conn *Conn, e *EventGuildBanAdd) error:
 		em["GUILD_BAN_ADD"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildBanRemove):
+	case func(ctx context.Context, conn *Conn, e *EventGuildBanRemove) error:
 		em["GUILD_BAN_REMOVE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildEmojisUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventGuildEmojisUpdate) error:
 		em["GUILD_EMOJIS_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildIntegrationsUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventGuildIntegrationsUpdate) error:
 		em["GUILD_INTEGRATIONS_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildMemberAdd):
+	case func(ctx context.Context, conn *Conn, e *EventGuildMemberAdd) error:
 		em["GUILD_MEMBER_ADD"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildMemberRemove):
+	case func(ctx context.Context, conn *Conn, e *EventGuildMemberRemove) error:
 		em["GUILD_MEMBER_REMOVE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildMemberUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventGuildMemberUpdate) error:
 		em["GUILD_MEMBER_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildMembersChunk):
+	case func(ctx context.Context, conn *Conn, e *EventGuildMembersChunk) error:
 		em["GUILD_MEMBERS_CHUNK"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildRoleCreate):
+	case func(ctx context.Context, conn *Conn, e *EventGuildRoleCreate) error:
 		em["GUILD_ROLE_CREATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildRoleUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventGuildRoleUpdate) error:
 		em["GUILD_ROLE_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildRoleDelete):
+	case func(ctx context.Context, conn *Conn, e *EventGuildRoleDelete) error:
 		em["GUILD_ROLE_DELETE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageCreate):
+	case func(ctx context.Context, conn *Conn, e *EventMessageCreate) error:
 		em["MESSAGE_CREATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventMessageUpdate) error:
 		em["MESSAGE_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageDelete):
+	case func(ctx context.Context, conn *Conn, e *EventMessageDelete) error:
 		em["MESSAGE_DELETE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageDeleteBulk):
+	case func(ctx context.Context, conn *Conn, e *EventMessageDeleteBulk) error:
 		em["MESSAGE_DELETE_BULK"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageReactionAdd):
+	case func(ctx context.Context, conn *Conn, e *EventMessageReactionAdd) error:
 		em["MESSAGE_REACTION_ADD"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageReactionRemove):
+	case func(ctx context.Context, conn *Conn, e *EventMessageReactionRemove) error:
 		em["MESSAGE_REACTION_REMOVE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageReactionRemoveAll):
+	case func(ctx context.Context, conn *Conn, e *EventMessageReactionRemoveAll) error:
 		em["MESSAGE_REACTION_REMOVE_ALL"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventPresenceUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventPresenceUpdate) error:
 		em["PRESENCE_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventTypingStart):
+	case func(ctx context.Context, conn *Conn, e *EventTypingStart) error:
 		em["TYPING_START"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventUserUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventUserUpdate) error:
 		em["USER_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventVoiceStateUpdate):
+	case func(ctx context.Context, conn *Conn, e *EventVoiceStateUpdate) error:
 		em["VOICE_STATE_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *eventVoiceServerUpdate):
+	case func(ctx context.Context, conn *Conn, e *eventVoiceServerUpdate) error:
 		em["VOICE_SERVER_UPDATE"] = fn
 	default:
 		panic("unknown event handler signature")
 	}
 }
 
-func (em eventMux) route(ctx context.Context, conn *Conn, p *receivedPayload, sync bool) error {
+func (em EventMux) getHandler(ctx context.Context, conn *Conn, p *receivedPayload) (func() error, error) {
 	h, ok := em[p.Type]
 	if !ok {
 		// Discord better not be sending unknown events.
-		return nil
+		return nil, nil
 	}
 	e := reflect.New(reflect.TypeOf(h).In(2).Elem())
 	err := json.Unmarshal(p.Data, e.Interface())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(conn), e}
-	fn := func() {
-		reflect.ValueOf(h).Call(args)
-	}
-	if sync {
-		fn()
-	} else {
-		conn.runWorker(fn)
-	}
-	return nil
+	return func() error {
+		args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(conn), e}
+		err = reflect.ValueOf(h).Call(args)[0].Interface().(error)
+		if err != nil {
+			return &EventHandlerError{
+				EventName: p.Type,
+				Event:     e.Interface(),
+				Err:       err,
+			}
+		}
+		return nil
+	}, nil
 }
 
+// State stored from websocket events.
 type State struct {
-	sync.RWMutex
+	sessionID string
+	eventMux EventMux
 
+	sync.RWMutex
 	user       *ModelUser
 	dmChannels map[string]*ModelChannel
-
 	guilds   map[string]*ModelGuild
 	channels map[string]*ModelChannel
 }
 
-func (s *State) registerEventHandlers(em *eventMux) {
-	em.Register(s.ready)
-	em.Register(s.createChannel)
+func newState() *State {
+	s := &State{
+		eventMux: NewEventMux(),
+		dmChannels: make(map[string]*ModelChannel),
+		guilds: make(map[string]*ModelGuild),
+		channels: make(map[string]*ModelChannel),
+	}
+
+	s.eventMux.Register(s.ready)
+	s.eventMux.Register(s.createChannel)
+
+	return s
 }
 
-func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) {
+func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {
+	s.sessionID = e.SessionID
 	s.Lock()
 	defer s.Unlock()
 	s.user = e.User
 	for _, c := range e.PrivateChannels {
 		s.dmChannels[c.ID] = c
 	}
+	for _, g := range e.Guilds {
+		s.guilds[g.ID] = g
+	}
+	return nil
 }
 
-func (s *State) createChannel(ctx context.Context, conn *Conn, e *EventChannelCreate) {
-	s.insertChannel(&e.ModelChannel)
+func (s *State) createChannel(ctx context.Context, conn *Conn, e *EventChannelCreate) error {
+	return s.insertChannel(&e.ModelChannel)
 }
 
-func (s *State) updateChannel(ctx context.Context, conn *Conn, e *EventChannelUpdate) {
-	s.insertChannel(&e.ModelChannel)
+func (s *State) updateChannel(ctx context.Context, conn *Conn, e *EventChannelUpdate) error {
+	return s.insertChannel(&e.ModelChannel)
 }
 
-func (s *State) insertChannel(c *ModelChannel) {
+func (s *State) insertChannel(c *ModelChannel) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -331,6 +364,7 @@ func (s *State) insertChannel(c *ModelChannel) {
 		}
 		g.Channels = append(g.Channels, c)
 	}
+	return nil
 }
 
 func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDelete) {
@@ -371,6 +405,8 @@ func (s *State) Channel(cID string) (*ModelChannel, bool) {
 	}
 }
 
+// TODO how do I handle a createGuild in response to a guild being unavailable?
+// Should the error event even run?
 func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
 	s.Lock()
 	defer s.Unlock()
