@@ -18,31 +18,27 @@ import (
 
 // ModelChannel represents a channel in Discord.
 type ModelChannel struct {
-	ID   string      `json:"id"`
-	Type channelType `json:"type"`
+	ID   string `json:"id"`
+	Type int    `json:"type"`
 
 	// All of these may be null. They are pointers so that consumer's
 	// of the package will be reminded that they may be null.
-	GuildID              *string                      `json:"guild_id"`
-	Position             *int                         `json:"position"`
-	PermissionOverwrites *[]*ModelPermissionOverwrite `json:"permission_overwrites"`
-	Name                 *string                      `json:"name"`
-	Topic                *string                      `json:"topic"`
-	LastMessageID        *string                      `json:"last_message_id"`
-	Bitrate              *int                         `json:"bitrate"`
-	UserLimit            *int                         `json:"user_limit"`
-	Recipients           *[]*ModelUser                `json:"recipients"`
-	Icon                 *string                      `json:"icon"`
-	OwnerID              *string                      `json:"owner_id"`
-	ApplicationID        *string                      `json:"application_id"`
-
-	messages []*ModelMessage `json:"-"`
+	GuildID              *string                     `json:"guild_id"`
+	Position             *int                        `json:"position"`
+	PermissionOverwrites []*ModelPermissionOverwrite `json:"permission_overwrites"`
+	Name                 *string                     `json:"name"`
+	Topic                *string                     `json:"topic"`
+	LastMessageID        *string                     `json:"last_message_id"`
+	Bitrate              *int                        `json:"bitrate"`
+	UserLimit            *int                        `json:"user_limit"`
+	Recipients           []*ModelUser                `json:"recipients"`
+	Icon                 *string                     `json:"icon"`
+	OwnerID              *string                     `json:"owner_id"`
+	ApplicationID        *string                     `json:"application_id"`
 }
 
-type channelType int
-
 const (
-	ModelChannelTypeGuildText channelType = iota
+	ModelChannelTypeGuildText = iota
 	ModelChannelTypeDM
 	ModelChannelTypeGuildVoice
 	ModelChannelTypeGroupDM
@@ -66,10 +62,8 @@ type ModelMessage struct {
 	Nonce           *string            `json:"nonce"`
 	Pinned          bool               `json:"pinned"`
 	WebhookID       *string            `json:"webhook_id"`
-	Type            messageType        `json:"type"`
+	Type            int                `json:"type"`
 }
-
-type messageType int
 
 const (
 	ModelMessageTypeDefault = iota

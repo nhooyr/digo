@@ -24,35 +24,26 @@ type ModelGuild struct {
 	Features                        []string           `json:"features"` // not sure if this is right, DiscordGo doesn't have anything
 	MFALevel                        int                `json:"mfa_level"`
 	JoinedAt                        time.Time          `json:"joined_at"`
-
-	// These fields are only sent within the GUILD_CREATE event
-	Large       *bool               `json:"large"`
-	Unavailable *bool               `json:"unavailable"`
-	MemberCount *int                `json:"member_count"`
-	VoiceStates []*ModelVoiceState  `json:"voice_states"` // without guild_id key
-	Members     []*ModelGuildMember `json:"members"`
-	Channels    []*ModelChannel     `json:"channels"`
-	Presences   []*ModelPresence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
 }
 
 const (
-	LevelMessageNotificationAllMessages = iota
+	LevelMessageNotificationAllMessages  = iota
 	LevelMessageNotificationOnlyMentions
 )
 
 const (
-	LevelExplicitContentFilterDisabled = iota
+	LevelExplicitContentFilterDisabled            = iota
 	LevelExplicitContentFilterMembersWithoutRoles
 	LevelExplicitContentFilterAllMembers
 )
 
 const (
-	LevelMFANone = iota
+	LevelMFANone     = iota
 	LevelMFAElevated
 )
 
 const (
-	LevelVerificationNone = iota
+	LevelVerificationNone     = iota
 	LevelVerificationLow
 	LevelVerificationMedium
 	LevelVerificationHigh

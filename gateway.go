@@ -44,6 +44,7 @@ type Conn struct {
 	logf         func(format string, v ...interface{})
 
 	gatewayURL string
+	sessionID  string
 
 	closeChan chan struct{}
 	wg        sync.WaitGroup
@@ -166,7 +167,7 @@ func (c *Conn) manager() {
 }
 
 const (
-	operationDispatch            = iota
+	operationDispatch = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -520,7 +521,8 @@ func (c *Conn) heartbeat() error {
 	return c.wsConn.WriteJSON(p)
 }
 
-// Close closes the connection. It never returns an error. That's a really bad idea i think..
+// Close closes the connection. It never returns an error.
+// All errors will be handled by the ErrorHandler given in the DialConfig.
 func (c *Conn) Close() error {
 	c.closeChan <- struct{}{}
 	<-c.closeChan

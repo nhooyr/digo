@@ -3,10 +3,8 @@ package discgo
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
-	"sync"
 )
 
 type eventReady struct {
@@ -36,6 +34,13 @@ type EventChannelDelete struct {
 
 type EventGuildCreate struct {
 	ModelGuild
+	Large       bool                `json:"large"`
+	Unavailable bool                `json:"unavailable"`
+	MemberCount int                 `json:"member_count"`
+	VoiceStates []*ModelVoiceState  `json:"voice_states"` // without guild_id key
+	Members     []*ModelGuildMember `json:"members"`
+	Channels    []*ModelChannel     `json:"channels"`
+	Presences   []*ModelPresence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
 }
 
 type EventGuildUpdate struct {
@@ -300,212 +305,4 @@ func (em EventMux) getHandler(ctx context.Context, conn *Conn, p *receivedPayloa
 		}
 		return nil
 	}, nil
-}
-
-// State stored from websocket events.
-type State struct {
-	sessionID string
-	eventMux  EventMux
-
-	sync.RWMutex
-	user       *ModelUser
-	dmChannels map[string]*ModelChannel
-	guilds     map[string]*ModelGuild
-	channels   map[string]*ModelChannel
-}
-
-func newState() *State {
-	s := &State{
-		eventMux:   newEventMux(),
-		dmChannels: make(map[string]*ModelChannel),
-		guilds:     make(map[string]*ModelGuild),
-		channels:   make(map[string]*ModelChannel),
-	}
-
-	s.eventMux.Register(s.ready)
-	s.eventMux.Register(s.createChannel)
-
-	return s
-}
-
-func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {
-	s.sessionID = e.SessionID
-	s.Lock()
-	defer s.Unlock()
-	s.user = e.User
-	for _, c := range e.PrivateChannels {
-		s.dmChannels[c.ID] = c
-	}
-	for _, g := range e.Guilds {
-		s.guilds[g.ID] = g
-	}
-	return nil
-}
-
-func (s *State) createChannel(ctx context.Context, conn *Conn, e *EventChannelCreate) error {
-	return s.insertChannel(&e.ModelChannel)
-}
-
-func (s *State) updateChannel(ctx context.Context, conn *Conn, e *EventChannelUpdate) error {
-	return s.insertChannel(&e.ModelChannel)
-}
-
-func (s *State) insertChannel(c *ModelChannel) error {
-	s.Lock()
-	defer s.Unlock()
-
-	if c.Type == ModelChannelTypeDM || c.Type == ModelChannelTypeGroupDM {
-		s.dmChannels[c.ID] = c
-	} else {
-		s.channels[c.ID] = c
-
-		g, ok := s.guilds[*c.GuildID]
-		if !ok {
-			// TODO on panics, print out the associated event.
-			panic("a channel created for an unknown guild")
-		}
-		g.Channels = append(g.Channels, c)
-	}
-	return nil
-}
-
-func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-
-	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
-		delete(s.dmChannels, e.ID)
-	} else {
-		delete(s.channels, e.ID)
-
-		g, ok := s.guilds[*e.GuildID]
-		if !ok {
-			// TODO on panics, print out the associated event.
-			panic("a channel created for an unknown guild")
-		}
-		for i, c := range g.Channels {
-			if c.ID == e.ID {
-				g.Channels = append(g.Channels[:i], g.Channels[i+1:]...)
-				break
-			}
-		}
-	}
-}
-
-var errHandled = errors.New("no need to handle the event further")
-
-func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) error {
-	s.Lock()
-	defer s.Unlock()
-	return nil
-}
-
-func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) addGuildBan(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberAdd) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) chunkGuildMembers(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) createGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) updateGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) deleteGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) createMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) bulkDeleteMessages(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) startTyping(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) updateUser(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) updateVoiceState(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
-}
-
-func (s *State) updateVoiceServer(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.Lock()
-	defer s.Unlock()
 }
