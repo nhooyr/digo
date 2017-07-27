@@ -194,6 +194,7 @@ func (s *StateGuild) Presences() []*ModelPresence {
 type StateChannel struct {
 	mu       sync.RWMutex
 	c        *ModelChannel
+	guild    *StateGuild
 	messages []*ModelMessage
 }
 
@@ -209,10 +210,10 @@ func (s *StateChannel) Type() int {
 	return s.c.Type
 }
 
-func (s *StateChannel) GuildID() string {
+func (s *StateChannel) Guild() *StateGuild {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.c.GuildID
+	return s.guild
 }
 
 func (s *StateChannel) Position() int {
@@ -224,7 +225,9 @@ func (s *StateChannel) Position() int {
 func (s *StateChannel) PermissionOverwrites() []*ModelPermissionOverwrite {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.c.PermissionOverwrites
+	permissionOverwrites := make([]*ModelPermissionOverwrite, len(s.c.PermissionOverwrites))
+	copy(permissionOverwrites, s.c.PermissionOverwrites)
+	return permissionOverwrites
 }
 
 func (s *StateChannel) Name() string {
@@ -260,7 +263,9 @@ func (s *StateChannel) UserLimit() int {
 func (s *StateChannel) Recipients() []*ModelUser {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.c.Recipients
+	recipients := make([]*ModelUser, len(s.c.Recipients))
+	copy(recipients, s.c.Recipients)
+	return recipients
 }
 
 func (s *StateChannel) Icon() string {
@@ -279,6 +284,15 @@ func (s *StateChannel) ApplicationID() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.c.ApplicationID
+}
+
+// Last message is the most recent.
+func (s *StateChannel) Messages() []*ModelMessage {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	messages := make([]*ModelMessage, len(s.messages))
+	copy(messages, s.messages)
+	return messages
 }
 
 func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {

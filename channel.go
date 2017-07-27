@@ -18,8 +18,8 @@ import (
 
 // ModelChannel represents a channel in Discord.
 type ModelChannel struct {
-	ID                   string                      `json:"id"`
-	Type                 int                         `json:"type"`
+	ID   string `json:"id"`
+	Type int    `json:"type"`
 
 	// Any of these may be null. Not sure which to make pointers and which
 	// can be null based on the type of the channel.

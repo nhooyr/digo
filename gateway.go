@@ -66,6 +66,7 @@ type Conn struct {
 
 type DialConfig struct {
 	Client   *Client
+	// TODO Not being able to set this dynamically might be a problem for https://github.com/hammerandchisel/discord-api-docs/blob/master/docs/topics/Gateway.md#guild-members-chunk
 	EventMux EventMux
 	// May be called concurrently.
 	ErrorHandler func(err error)
