@@ -39,11 +39,6 @@ type ModelChannel struct {
 	messages []*ModelMessage `json:"-"`
 }
 
-func (c *ModelChannel) copy() *ModelChannel {
-	c2 := *c
-	return &c2
-}
-
 type channelType int
 
 const (

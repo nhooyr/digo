@@ -3,6 +3,7 @@ package discgo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -162,7 +163,7 @@ type ModelGame struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	ModelGameTypeGame      = iota
+	ModelGameTypeGame = iota
 	ModelGameTypeStreaming
 )
 
@@ -200,9 +201,10 @@ func (e *EventHandlerError) Error() string {
 	return fmt.Sprintf("%v handler error: %v\nevent: %v", e.EventName, e.Err, eventJSON)
 }
 
+// Used by DialConfig
 type EventMux map[string]interface{}
 
-func NewEventMux() EventMux {
+func newEventMux() EventMux {
 	return make(map[string]interface{})
 }
 
@@ -275,7 +277,7 @@ func (em EventMux) Register(fn interface{}) {
 	}
 }
 
-func (em EventMux) getHandler(ctx context.Context, conn *Conn, p *receivedPayload) (func() error, error) {
+func (em EventMux) getHandler(ctx context.Context, conn *Conn, p *receivedPayload) (func() *EventHandlerError, error) {
 	h, ok := em[p.Type]
 	if !ok {
 		// Discord better not be sending unknown events.
@@ -286,14 +288,14 @@ func (em EventMux) getHandler(ctx context.Context, conn *Conn, p *receivedPayloa
 	if err != nil {
 		return nil, err
 	}
-	return func() error {
+	return func() *EventHandlerError {
 		args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(conn), e}
-		err = reflect.ValueOf(h).Call(args)[0].Interface().(error)
+		err := reflect.ValueOf(h).Call(args)[0].Interface()
 		if err != nil {
 			return &EventHandlerError{
 				EventName: p.Type,
 				Event:     e.Interface(),
-				Err:       err,
+				Err:       err.(error),
 			}
 		}
 		return nil
@@ -303,21 +305,21 @@ func (em EventMux) getHandler(ctx context.Context, conn *Conn, p *receivedPayloa
 // State stored from websocket events.
 type State struct {
 	sessionID string
-	eventMux EventMux
+	eventMux  EventMux
 
 	sync.RWMutex
 	user       *ModelUser
 	dmChannels map[string]*ModelChannel
-	guilds   map[string]*ModelGuild
-	channels map[string]*ModelChannel
+	guilds     map[string]*ModelGuild
+	channels   map[string]*ModelChannel
 }
 
 func newState() *State {
 	s := &State{
-		eventMux: NewEventMux(),
+		eventMux:   newEventMux(),
 		dmChannels: make(map[string]*ModelChannel),
-		guilds: make(map[string]*ModelGuild),
-		channels: make(map[string]*ModelChannel),
+		guilds:     make(map[string]*ModelGuild),
+		channels:   make(map[string]*ModelChannel),
 	}
 
 	s.eventMux.Register(s.ready)
@@ -390,26 +392,12 @@ func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDe
 	}
 }
 
-func (s *State) Channel(cID string) (*ModelChannel, bool) {
-	s.RLock()
-	defer s.RUnlock()
+var errHandled = errors.New("no need to handle the event further")
 
-	c, ok := s.dmChannels[cID]
-	if ok {
-
-	}
-
-	c, ok = s.channels[cID]
-	if ok {
-
-	}
-}
-
-// TODO how do I handle a createGuild in response to a guild being unavailable?
-// Should the error event even run?
-func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) error {
 	s.Lock()
 	defer s.Unlock()
+	return nil
 }
 
 func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {

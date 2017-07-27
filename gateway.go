@@ -14,6 +14,8 @@ import (
 
 	"math/rand"
 
+	"log"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -37,9 +39,9 @@ type Conn struct {
 	Client *Client
 	State  *State
 
-	eventMux EventMux
-	errorHandler     func(err error)
-	logf             func(format string, v ...interface{})
+	eventMux     EventMux
+	errorHandler func(err error)
+	logf         func(format string, v ...interface{})
 
 	gatewayURL string
 
@@ -62,23 +64,38 @@ type Conn struct {
 }
 
 type DialConfig struct {
-	Client       *Client
-	EventMux     EventMux
+	Client   *Client
+	EventMux EventMux
+	// May be called concurrently.
 	ErrorHandler func(err error)
-	Logf         func(format string, v ...interface{})
+	// May be called concurrently.
+	Logf func(format string, v ...interface{})
+}
+
+func NewDialConfig() *DialConfig {
+	return &DialConfig{
+		EventMux: newEventMux(),
+		ErrorHandler: func(err error) {
+			log.Print(err)
+		},
+		Logf: func(format string, v ...interface{}) {
+			log.Printf(format, v...)
+		},
+	}
 }
 
 func Dial(config *DialConfig) (*Conn, error) {
 	c := &Conn{
-		Client:           config.Client,
-		eventMux: config.EventMux,
-		errorHandler:     config.ErrorHandler,
-		logf:             config.Logf,
+		State:        newState(),
+		Client:       config.Client,
+		eventMux:     config.EventMux,
+		errorHandler: config.ErrorHandler,
+		logf:         config.Logf,
 
-		closeChan:        make(chan struct{}),
-		reconnectChan:    make(chan struct{}),
-		writeChan:        make(chan *sentPayload),
-		ready:            true,
+		closeChan:     make(chan struct{}),
+		reconnectChan: make(chan struct{}),
+		writeChan:     make(chan *sentPayload),
+		ready:         true,
 	}
 	return c, c.dial()
 }
@@ -114,6 +131,38 @@ func (c *Conn) dial() (err error) {
 	go c.manager()
 
 	return nil
+}
+
+func (c *Conn) manager() {
+	ctx, cancelFn := context.WithCancel(context.Background())
+	c.runWorker(func() {
+		c.writeLoop(ctx)
+	})
+	c.runWorker(func() {
+		c.readLoop(ctx)
+	})
+
+	if c.State.sessionID == "" {
+		c.identify(ctx)
+	} else {
+		c.resume(ctx)
+	}
+
+	select {
+	case <-c.reconnectChan:
+		cancelFn()
+		c.wg.Wait()
+
+		err := c.dial()
+		if err != nil {
+			c.log(err)
+		}
+	case <-c.closeChan:
+		cancelFn()
+		c.wg.Wait()
+
+		c.closeChan <- struct{}{}
+	}
 }
 
 const (
@@ -168,7 +217,7 @@ writeLoop:
 
 			err := c.wsConn.WriteJSON(p)
 			if err != nil {
-				c.log(err)
+				c.errorHandler(err)
 				select {
 				case c.reconnectChan <- struct{}{}:
 				case <-ctx.Done():
@@ -189,12 +238,12 @@ writeLoop:
 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
 	err = c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
 	if err != nil {
-		c.log(err)
+		c.errorHandler(err)
 	}
 
 	err = c.wsConn.Close()
 	if err != nil {
-		c.log(err)
+		c.errorHandler(err)
 	}
 }
 
@@ -257,38 +306,6 @@ func (c *Conn) resume(ctx context.Context) {
 	c.write(ctx, p)
 }
 
-func (c *Conn) manager() {
-	ctx, cancelFn := context.WithCancel(context.Background())
-	c.runWorker(func() {
-		c.writeLoop(ctx)
-	})
-	c.runWorker(func() {
-		c.readLoop(ctx)
-	})
-
-	if c.State.sessionID == "" {
-		c.identify(ctx)
-	} else {
-		c.resume(ctx)
-	}
-
-	select {
-	case <-c.reconnectChan:
-		cancelFn()
-		c.wg.Wait()
-
-		err := c.dial()
-		if err != nil {
-			c.log(err)
-		}
-	case <-c.closeChan:
-		cancelFn()
-		c.wg.Wait()
-
-		c.closeChan <- struct{}{}
-	}
-}
-
 func (c *Conn) runWorker(fn func()) {
 	c.wg.Add(1)
 	go func() {
@@ -309,7 +326,7 @@ func (c *Conn) readLoop(ctx context.Context) {
 		p, err := c.readPayload()
 		if err != nil {
 			if !isUseOfClosedError(err) {
-				c.log(err)
+				c.errorHandler(err)
 				// It's possible we're being shutdown right now too.
 				// Or maybe manager is already trying to reconnect.
 				select {
@@ -330,7 +347,7 @@ func (c *Conn) readLoop(ctx context.Context) {
 
 		err = c.onPayload(ctx, p)
 		if err != nil {
-			c.log(err)
+			c.errorHandler(err)
 			// It's possible we're being shutdown right now.
 			// Or maybe manager is already trying to reconnect.
 			select {
@@ -435,19 +452,31 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 			return err
 		}
 
-		err := fn()
-		if err != nil {
-			return nil
+		if fn != nil {
+			ehErr := fn()
+			if ehErr != nil {
+				if ehErr.Err == errHandled {
+					return nil
+				}
+				// State has been corrupted somehow. E.g. a message created for a non existing guild.
+				// Or a reaction for a non existing message. Something went wrong. We should reconnect.
+				return err
+			}
 		}
 
-		conn.runWorker(func() {
-			err := fn()
-
-		})
-
-		err = c.externalEventMux.route(ctx, c, p, false)
+		fn, err = c.eventMux.getHandler(ctx, c, p)
 		if err != nil {
-			return err
+			// The State eventMux should have errored. This should be impossible.
+			panic(err)
+		}
+
+		if fn != nil {
+			c.runWorker(func() {
+				err = fn()
+				if err != nil {
+					c.errorHandler(err)
+				}
+			})
 		}
 	default:
 		panic("discord gone crazy; unexpected operation type")
@@ -491,6 +520,7 @@ func (c *Conn) heartbeat() error {
 	return c.wsConn.WriteJSON(p)
 }
 
+// Close closes the connection. It never returns an error. That's a really bad idea i think..
 func (c *Conn) Close() error {
 	c.closeChan <- struct{}{}
 	<-c.closeChan
