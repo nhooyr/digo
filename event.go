@@ -161,7 +161,7 @@ type ModelGame struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	ModelGameTypeGame      = iota
+	ModelGameTypeGame = iota
 	ModelGameTypeStreaming
 )
 
@@ -289,8 +289,8 @@ type State struct {
 	user       *ModelUser
 	dmChannels map[string]*ModelChannel
 
-	guildMap   map[string]*ModelGuild
-	channelMap map[string]*ModelChannel
+	guilds   map[string]*ModelGuild
+	channels map[string]*ModelChannel
 }
 
 func (s *State) registerEventHandlers(em *eventMux) {
@@ -307,21 +307,6 @@ func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) {
 	}
 }
 
-func (s *State) insertChannel(c *ModelChannel) {
-	s.Lock()
-	defer s.Unlock()
-	if c.Type == ModelChannelTypeDM || c.Type == ModelChannelTypeGroupDM {
-		s.dmChannels[c.ID] = c
-	} else {
-		g, ok := s.guildMap[*c.GuildID]
-		if !ok {
-			// TODO on panics, print out the associated event.
-			panic("a channel created for an unknown guild")
-		}
-		*g.Channels = append(*g.Channels, c)
-	}
-}
-
 func (s *State) createChannel(ctx context.Context, conn *Conn, e *EventChannelCreate) {
 	s.insertChannel(&e.ModelChannel)
 }
@@ -330,18 +315,59 @@ func (s *State) updateChannel(ctx context.Context, conn *Conn, e *EventChannelUp
 	s.insertChannel(&e.ModelChannel)
 }
 
-func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+func (s *State) insertChannel(c *ModelChannel) {
 	s.Lock()
 	defer s.Unlock()
-	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
-		s.dmChannels = append(s.dmChannels, c)
+
+	if c.Type == ModelChannelTypeDM || c.Type == ModelChannelTypeGroupDM {
+		s.dmChannels[c.ID] = c
 	} else {
-		g, ok := s.guildMap[*c.GuildID]
+		s.channels[c.ID] = c
+
+		g, ok := s.guilds[*c.GuildID]
 		if !ok {
 			// TODO on panics, print out the associated event.
 			panic("a channel created for an unknown guild")
 		}
-		*g.Channels = append(*g.Channels, c)
+		g.Channels = append(g.Channels, c)
+	}
+}
+
+func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+	s.Lock()
+	defer s.Unlock()
+
+	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
+		delete(s.dmChannels, e.ID)
+	} else {
+		delete(s.channels, e.ID)
+
+		g, ok := s.guilds[*e.GuildID]
+		if !ok {
+			// TODO on panics, print out the associated event.
+			panic("a channel created for an unknown guild")
+		}
+		for i, c := range g.Channels {
+			if c.ID == e.ID {
+				g.Channels = append(g.Channels[:i], g.Channels[i+1:]...)
+				break
+			}
+		}
+	}
+}
+
+func (s *State) Channel(cID string) (*ModelChannel, bool) {
+	s.RLock()
+	defer s.RUnlock()
+
+	c, ok := s.dmChannels[cID]
+	if ok {
+
+	}
+
+	c, ok = s.channels[cID]
+	if ok {
+
 	}
 }
 

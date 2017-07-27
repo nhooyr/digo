@@ -36,7 +36,12 @@ type ModelChannel struct {
 	OwnerID              *string                      `json:"owner_id"`
 	ApplicationID        *string                      `json:"application_id"`
 
-	Messages []*ModelMessage `json:"-"`
+	messages []*ModelMessage `json:"-"`
+}
+
+func (c *ModelChannel) copy() *ModelChannel {
+	c2 := *c
+	return &c2
 }
 
 type channelType int

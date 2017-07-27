@@ -26,13 +26,13 @@ type ModelGuild struct {
 	JoinedAt                        time.Time          `json:"joined_at"`
 
 	// These fields are only sent within the GUILD_CREATE event
-	Large       *bool                `json:"large"`
-	Unavailable *bool                `json:"unavailable"`
-	MemberCount *int                 `json:"member_count"`
-	VoiceStates *[]*ModelVoiceState  `json:"voice_states"` // without guild_id key
-	Members     *[]*ModelGuildMember `json:"members"`
-	Channels    *[]*ModelChannel     `json:"channels"`
-	Presences   *[]*ModelPresence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
+	Large       *bool               `json:"large"`
+	Unavailable *bool               `json:"unavailable"`
+	MemberCount *int                `json:"member_count"`
+	VoiceStates []*ModelVoiceState  `json:"voice_states"` // without guild_id key
+	Members     []*ModelGuildMember `json:"members"`
+	Channels    []*ModelChannel     `json:"channels"`
+	Presences   []*ModelPresence    `json:"presences"` // TODO like presence update event sans a roles or guild_id key
 }
 
 const (
