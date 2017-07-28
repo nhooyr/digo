@@ -42,6 +42,7 @@ type StateGuild struct {
 	unavailable bool
 	memberCount int
 	voiceStates []*ModelVoiceState
+	// TODO Having this as a slice means it's annoying to use Gateway Request Guild Members. I could make it a map later.
 	members     []*ModelGuildMember
 	channels    []*StateChannel
 	presences   []*ModelPresence
@@ -397,19 +398,19 @@ var errHandled = errors.New("no need to handle the event further")
 
 func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate) error {
 	sg := &StateGuild{
-		g: &e.ModelGuild,
-		large: e.Large,
+		g:           &e.ModelGuild,
+		large:       e.Large,
 		unavailable: e.Unavailable,
 		memberCount: e.MemberCount,
 		voiceStates: e.VoiceStates,
-		members: e.Members,
-		presences: e.Presences,
+		members:     e.Members,
+		presences:   e.Presences,
 	}
 
 	s.mu.Lock()
 	for _, c := range e.Channels {
 		sc := &StateChannel{
-			c: c,
+			c:     c,
 			guild: sg,
 		}
 		sg.channels = append(sg.channels, sc)
@@ -434,13 +435,15 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 
 func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventGuildUpdate) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	sg, ok := s.guilds[e.ID]
 	if !ok {
 		return errors.New("non existing guild updated?")
 	}
+	s.mu.Unlock()
+
+	sg.mu.Lock()
 	sg.g = &e.ModelGuild
+	sg.mu.Unlock()
 	return nil
 }
 
@@ -463,26 +466,56 @@ func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete
 		// I don't think ID() helper is necessary, but cannot be too safe.
 		delete(s.channels, sc.ID())
 	}
+	return nil
 }
 
-func (s *State) addGuildBan(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// TODO maybe guild ban add and guild ban remove? Not sure....
+
+func (s *State) Guild(id string) (*StateGuild, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sg, ok := s.guilds[id]
+	return sg, ok
 }
 
-func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventGuildEmojisUpdate) error {
+	sg, ok := s.Guild(e.GuildID)
+	if !ok {
+		return errors.New("guild emojis updated for non existing guild")
+	}
+	sg.mu.Lock()
+	sg.g.Emojis = e.Emojis
+	sg.mu.Unlock()
+	return nil
 }
 
-func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberAdd) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberAdd) error {
+	sg, ok := s.Guild(e.GuildID)
+	if !ok {
+		return errors.New("guild member added in non existing guild")
+	}
+	sg.mu.Lock()
+	sg.memberCount++
+	sg.members = append(sg.members, &e.ModelGuildMember)
+	sg.mu.Unlock()
+	return nil
 }
 
-func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberRemove) error {
+	sg, ok := s.Guild(e.GuildID)
+	if !ok {
+		return errors.New("guild member removed in non existing guild")
+	}
+	for i, gm := range sg.Members() {
+		if gm.User.ID == e.User.ID {
+			sg.mu.Lock()
+			sg.memberCount--
+			sg.members = append(sg.members[:i], sg.members[i+1:]...)
+			sg.mu.Unlock()
+			return nil
+		}
+	}
+	return errors.New("guild member removed in a guild where it never joined?")
 }
 
 func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {

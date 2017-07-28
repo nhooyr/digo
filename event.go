@@ -72,6 +72,7 @@ type EventGuildIntegrationsUpdate struct {
 }
 
 type EventGuildMemberAdd struct {
+	ModelGuildMember
 	GuildID string `json:"guild_id"`
 }
 
