@@ -44,10 +44,9 @@ type StateGuild struct {
 	unavailable bool
 	memberCount int
 	voiceStates []*ModelVoiceState
-	// TODO Having this as a slice means it's annoying to use Gateway Request Guild Members. I could make it a map later. Though I'm not 100% sure. What happens if a user comes online or joins before IGateway Request Guild Members?
-	members   []*ModelGuildMember
-	channels  []*StateChannel
-	presences []*ModelPresence
+	members     map[string]*ModelGuildMember
+	channels    []*StateChannel
+	presences   []*ModelPresence
 }
 
 func (sg *StateGuild) ID() string {

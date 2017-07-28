@@ -49,6 +49,7 @@ type Conn struct {
 	closeChan chan struct{}
 	wg        sync.WaitGroup
 
+	shard        *[2]int
 	lastIdentify time.Time
 	ready        bool
 	resuming     bool
@@ -72,6 +73,9 @@ type DialConfig struct {
 	ErrorHandler func(err error)
 	// May be called concurrently.
 	Logf func(format string, v ...interface{})
+
+	Shard       int
+	ShardsCount int
 }
 
 func NewDialConfig() *DialConfig {
@@ -88,7 +92,8 @@ func NewDialConfig() *DialConfig {
 
 func Dial(config *DialConfig) (*Conn, error) {
 	c := &Conn{
-		State:        newState(),
+		State: newState(),
+
 		Client:       config.Client,
 		eventMux:     config.EventMux,
 		errorHandler: config.ErrorHandler,
@@ -98,6 +103,9 @@ func Dial(config *DialConfig) (*Conn, error) {
 		reconnectChan: make(chan struct{}),
 		writeChan:     make(chan *sentPayload),
 		ready:         true,
+	}
+	if config.ShardsCount > 1 {
+		c.shard = &[2]int{config.Shard, config.ShardsCount}
 	}
 	return c, c.dial()
 }
@@ -168,7 +176,7 @@ func (c *Conn) manager() {
 }
 
 const (
-	operationDispatch = iota
+	operationDispatch            = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -254,6 +262,7 @@ type dataOpIdentify struct {
 	Properties     identifyProperties `json:"properties"`
 	Compress       bool               `json:"compress"`
 	LargeThreshold int                `json:"large_threshold"`
+	Shard          *[2]int            `json:"shard,omitempty"`
 }
 
 type identifyProperties struct {
@@ -280,6 +289,7 @@ func (c *Conn) identify(ctx context.Context) {
 			},
 			Compress:       true,
 			LargeThreshold: 250,
+			Shard:          c.shard,
 		},
 	}
 
