@@ -377,6 +377,7 @@ func (c *Conn) readPayload() (*receivedPayload, error) {
 		return &p, json.NewDecoder(z).Decode(&p)
 	case websocket.TextMessage:
 		return &p, json.NewDecoder(r).Decode(&p)
+		// TODO handle close frames!!! print out the error code. Probably with new web socket package.
 	default:
 		return nil, errors.New("unexpected websocket message type")
 	}
