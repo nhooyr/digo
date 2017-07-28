@@ -35,8 +35,9 @@ func newState() *State {
 }
 
 type StateGuild struct {
-	mu          sync.RWMutex
-	g           *ModelGuild
+	mu sync.RWMutex
+	g  *ModelGuild
+	// TODO seperate mutexes for these?
 	large       bool
 	unavailable bool
 	memberCount int
@@ -158,6 +159,13 @@ func (sg *StateGuild) Large() bool {
 	return sg.large
 }
 
+// No need for this to be exported, just a helper function. Couldn't think of a better name
+func (sg *StateGuild) Unavailable() bool {
+	sg.mu.RLock()
+	defer sg.mu.RUnlock()
+	return sg.unavailable
+}
+
 func (sg *StateGuild) MemberCount() int {
 	sg.mu.RLock()
 	defer sg.mu.RUnlock()
@@ -197,15 +205,16 @@ func (sg *StateGuild) Presences() []*ModelPresence {
 }
 
 type StateChannel struct {
-	mu       sync.RWMutex
-	c        *ModelChannel
-	guild    *StateGuild
+	mu    sync.RWMutex
+	c     *ModelChannel
+	guild *StateGuild
+	// TODO another mutex for this?
 	messages []*ModelMessage
 }
 
 func (sc *StateChannel) ID() string {
 	// It's immutable for sure but I'm doing this anyway because I'm gonna replace
-	// the entire ModelGuild pointer with another on a GuildUpdate event.
+	// the entire ModelChannel pointer with another on a ChannelUpdate event.
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
 	return sc.c.ID
@@ -218,8 +227,7 @@ func (sc *StateChannel) Type() int {
 }
 
 func (sc *StateChannel) Guild() *StateGuild {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
+	// Guaranteed to never change.
 	return sc.guild
 }
 
@@ -338,20 +346,20 @@ func (s *State) insertChannel(c *ModelChannel) error {
 	}
 
 	s.channels[c.ID] = sc
-	g, ok := s.guilds[c.GuildID]
+	sg, ok := s.guilds[c.GuildID]
 	s.mu.Unlock()
 
 	if !ok {
-		return errors.New("a channel created for an unknown guild")
+		return errors.New("a channel created/updated for an unknown guild")
 	}
 
 	sc.mu.Lock()
-	sc.guild = g
+	sc.guild = sg
 	sc.mu.Unlock()
 
-	g.mu.Lock()
-	g.channels = append(g.channels, sc)
-	g.mu.Unlock()
+	sg.mu.Lock()
+	sg.channels = append(sg.channels, sc)
+	sg.mu.Unlock()
 
 	return nil
 }
@@ -366,49 +374,95 @@ func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDe
 	}
 
 	delete(s.channels, e.ID)
-	g, ok := s.guilds[e.GuildID]
+	sg, ok := s.guilds[e.GuildID]
 	s.mu.Unlock()
 
 	if !ok {
 		return errors.New("a channel deleted for an unknown guild")
 	}
 
-	i := -1
-	g.mu.RLock()
-	for j, c := range g.channels {
-		if c.ID() == e.ID {
-			i = j
-			break
+	for i, sc := range sg.Channels() {
+		// I don't think ID() helper is necessary, but cannot be too safe.
+		if sc.ID() == e.ID {
+			sg.mu.Lock()
+			sg.channels = append(sg.channels[:i], sg.channels[i+1:]...)
+			sg.mu.Unlock()
+			return nil
 		}
 	}
-	g.mu.RUnlock()
-
-	if i == -1 {
-		return errors.New("channel removed from a guild where it never existed?")
-	}
-
-	g.mu.Lock()
-	g.channels = append(g.channels[:i], g.channels[i+1:]...)
-	g.mu.Unlock()
-	return nil
+	return errors.New("channel removed from a guild in which it never existed?")
 }
 
 var errHandled = errors.New("no need to handle the event further")
 
 func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate) error {
+	sg := &StateGuild{
+		g: &e.ModelGuild,
+		large: e.Large,
+		unavailable: e.Unavailable,
+		memberCount: e.MemberCount,
+		voiceStates: e.VoiceStates,
+		members: e.Members,
+		presences: e.Presences,
+	}
+
 	s.mu.Lock()
+	for _, c := range e.Channels {
+		sc := &StateChannel{
+			c: c,
+			guild: sg,
+		}
+		sg.channels = append(sg.channels, sc)
+		s.channels[c.ID] = sc
+	}
+	sgOld, ok := s.guilds[e.ID]
+	s.guilds[e.ID] = sg
 	defer s.mu.Unlock()
+
+	if ok {
+		if sgOld.Unavailable() {
+			// Guild is available again or was lazily loaded.
+			// Either way, don't run any GuildCreate event handlers.
+			return errHandled
+		}
+		// We updated the guild map even though the state is now corrupt.
+		// Shouldn't really be an issue though.
+		return errors.New("guild already exists?")
+	}
 	return nil
 }
 
-func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventGuildUpdate) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	sg, ok := s.guilds[e.ID]
+	if !ok {
+		return errors.New("non existing guild updated?")
+	}
+	sg.g = &e.ModelGuild
+	return nil
 }
 
-func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventChannelDelete) {
+func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	sg, ok := s.guilds[e.ID]
+	if !ok {
+		return errors.New("non existing guild deleted?")
+	}
+	if e.Unavailable {
+		sg.mu.Lock()
+		sg.unavailable = true
+		sg.mu.Lock()
+	} else {
+		delete(s.guilds, e.ID)
+	}
+	for _, sc := range sg.channels {
+		// I don't think ID() helper is necessary, but cannot be too safe.
+		delete(s.channels, sc.ID())
+	}
 }
 
 func (s *State) addGuildBan(ctx context.Context, conn *Conn, e *EventChannelDelete) {
