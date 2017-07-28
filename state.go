@@ -13,6 +13,7 @@ type State struct {
 	eventMux  EventMux
 
 	// TODO seperate mutex for guilds map, channels map etc?
+	// TODO event handlers send new transformed data further? E.g. not the raw events but StateGuild etc?
 	mu         sync.RWMutex
 	user       *ModelUser
 	dmChannels map[string]*StateChannel
@@ -516,17 +517,36 @@ func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventGuild
 			return nil
 		}
 	}
-	return errors.New("guild member removed in a guild where it never joined?")
+	return errors.New("guild member removed in a guild in which it never joined?")
 }
 
-func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberUpdate) error {
+	sg, ok := s.Guild(e.GuildID)
+	if !ok {
+		return errors.New("guild member updated in non existing guild")
+	}
+	for i, gm := range sg.Members() {
+		if gm.User.ID == e.User.ID {
+			gm2 := &ModelGuildMember{
+				User:     gm.User,
+				Roles:    e.Roles,
+				JoinedAt: gm.JoinedAt,
+				Deaf:     gm.Deaf,
+				Mute:     gm.Mute,
+				Nick:     gm.Nick,
+			}
+			sg.mu.Lock()
+			sg.members[i] = gm2
+			sg.mu.Unlock()
+			return nil
+		}
+	}
+	return errors.New("guild member updated in a guild in which it never joined?")
 }
 
-func (s *State) chunkGuildMembers(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// TODO not sure how to handle this stuff
+func (s *State) chunkGuildMembers(ctx context.Context, conn *Conn, e *EventGuildMembersChunk) error {
+	panic("TODO")
 }
 
 func (s *State) createGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
@@ -575,11 +595,6 @@ func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventC
 }
 
 func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-}
-
-func (s *State) startTyping(ctx context.Context, conn *Conn, e *EventChannelDelete) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 }

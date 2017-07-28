@@ -78,7 +78,7 @@ type EventGuildMemberAdd struct {
 
 type EventGuildMemberRemove struct {
 	User    ModelUser `json:"user"`
-	GuildID string     `json:"guild_id"`
+	GuildID string    `json:"guild_id"`
 }
 
 type EventGuildMemberUpdate struct {
