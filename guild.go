@@ -50,12 +50,6 @@ const (
 	LevelVerificationVeryHigh
 )
 
-type ModelPresence struct {
-	User   *ModelUser `json:"user"`
-	Game   *ModelGame `json:"game"`
-	Status string     `json:"status"`
-}
-
 type ModelGuildEmbed struct {
 	Enabled   bool   `json:"enabled,omitempty"`
 	ChannelID string `json:"channel_id,omitempty"`

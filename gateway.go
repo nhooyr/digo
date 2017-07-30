@@ -110,7 +110,6 @@ func Dial(config *DialConfig) (*Conn, error) {
 	return c, c.dial()
 }
 
-// TODO maybe take context.Context? though I doubt it's necessary
 // If it errors without receiving a operationDispatch payload, then
 // this method will always return an error.
 func (c *Conn) dial() (err error) {
@@ -124,6 +123,7 @@ func (c *Conn) dial() (err error) {
 	c.lastIdentify = time.Time{}
 
 	if c.gatewayURL == "" {
+		// TODO hardcoding this means we cannot use the bot gateway endpoint that returns the # of shards to use.
 		c.gatewayURL, err = c.Client.gateway().get()
 		if err != nil {
 			return err
@@ -176,7 +176,7 @@ func (c *Conn) manager() {
 }
 
 const (
-	operationDispatch            = iota
+	operationDispatch = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate

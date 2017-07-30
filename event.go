@@ -43,6 +43,12 @@ type EventGuildCreate struct {
 	Presences   []*ModelPresence    `json:"presences"`
 }
 
+type ModelPresence struct {
+	User   ModelUser `json:"user"`
+	Game   *ModelGame `json:"game"`
+	Status string `json:"status"`
+}
+
 type EventGuildUpdate struct {
 	ModelGuild
 }
@@ -147,6 +153,7 @@ type EventMessageReactionRemoveAll struct {
 }
 
 type EventPresenceUpdate struct {
+	// TODO why is there even a user here?
 	User    ModelUser  `json:"user"`
 	Roles   []string   `json:"roles"`
 	Game    *ModelGame `json:"game"`
@@ -169,7 +176,7 @@ type ModelGame struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	ModelGameTypeGame = iota
+	ModelGameTypeGame      = iota
 	ModelGameTypeStreaming
 )
 

@@ -18,7 +18,10 @@ type State struct {
 	user       *ModelUser
 	dmChannels map[string]*StateChannel
 	guilds     map[string]*StateGuild
-	channels   map[string]*StateChannel
+	// I have a seperate map for this because messages only store Channel IDs, no Guild IDs.
+	// So if someone wanted to find the Channel in which a message was sent, they would have to search
+	// all guilds.
+	channels map[string]*StateChannel
 	// TOOD users      map[string]*StateUser
 }
 
@@ -36,181 +39,242 @@ func newState() *State {
 	return s
 }
 
+// The maps are reason I went for a modelMu instead of using the map as a sync point. E.g. instead of
+// updating the values up above in the struct itself, I create a new struct and copy the values in
+// and then update the map with that new struct.
+// Issue with this is that if I would have to lock/unlock all the map mutexes before copying the
+// struct to make any little change. Sounds dumb to me. Reason I always have to lock is incase
+// the map reference is written to, e.g. when I want to dump one of the maps when I get a guild create
+// after a guild has gone unavailable.
 type StateGuild struct {
-	mu sync.RWMutex
-	g  *ModelGuild
-	// TODO seperate mutexes for these?
+	modelMu                         sync.RWMutex
+	id                              string
+	name                            string
+	icon                            string
+	splash                          string
+	ownerID                         string
+	region                          string
+	afkChannelID                    string
+	afkTimeout                      int
+	embedEnabled                    bool
+	embedChannelID                  string
+	verificationLevel               int
+	defaultMessageNotificationLevel int
+	features                        []string
+	mfaLevel                        int
+	joinedAt                        time.Time
+
+	rolesMu sync.RWMutex
+	roles  map[string]*ModelRole
+
+	emojisMu sync.RWMutex
+	emojis map[string]*ModelGuildEmoji
+
 	large       bool
+
+	unavailableMu sync.RWMutex
 	unavailable bool
+
+	memberCountMu sync.RWMutex
 	memberCount int
-	voiceStates []*ModelVoiceState
+
+	voiceStatesMu sync.RWMutex
+	voiceStates map[string]*ModelVoiceState
+
+	membersMu sync.RWMutex
 	members     map[string]*ModelGuildMember
-	channels    []*StateChannel
-	presences   []*ModelPresence
+
+	channelsMu sync.RWMutex
+	channels    map[string]*StateChannel
+
+	presencesMu sync.RWMutex
+	// TODO how should I handle improperly typed updates?
+	presences map[string]*StatePresence
+}
+
+type StateGuildMember struct {
+	StateUser
+}
+
+type StatePresence struct {
+	User   *StateUser `json:"user"`
+	Game   *ModelGame `json:"game"`
+	Status string     `json:"status"`
 }
 
 func (sg *StateGuild) ID() string {
 	// It's immutable for sure but I'm doing this anyway because I'm gonna replace
 	// the entire ModelGuild pointer with another on a GuildUpdate event.
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.ID
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.id
 }
 
 func (sg *StateGuild) Name() string {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.Name
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.name
 }
 
 func (sg *StateGuild) Icon() string {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.Icon
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.icon
 }
 
 func (sg *StateGuild) Splash() string {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.Splash
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.splash
 }
 
 func (sg *StateGuild) OwnerID() string {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.OwnerID
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.ownerID
 }
 
 func (sg *StateGuild) Region() string {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.Region
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.region
 }
 
 func (sg *StateGuild) AFKChannelID() string {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.AFKChannelID
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.afkChannelID
 }
 
 func (sg *StateGuild) AFKTimeout() int {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.AFKTimeout
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.afkTimeout
 }
 
 func (sg *StateGuild) EmbedEnabled() bool {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.EmbedEnabled
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.embedEnabled
 }
 
 func (sg *StateGuild) EmbedChannelID() string {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.EmbedChannelID
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.embedChannelID
 }
 
 func (sg *StateGuild) VerificationLevel() int {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.VerificationLevel
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.verificationLevel
 }
 
 func (sg *StateGuild) DefaultMessageNotificationLevel() int {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.DefaultMessageNotificationLevel
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.defaultMessageNotificationLevel
 }
 
 func (sg *StateGuild) Roles() []*ModelRole {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	roles := make([]*ModelRole, len(sg.g.Roles))
-	copy(roles, sg.g.Roles)
+	sg.rolesMu.RLock()
+	defer sg.rolesMu.RUnlock()
+	roles := make([]*ModelRole, 0, len(sg.roles))
+	for _, r := range sg.roles {
+		roles = append(roles, r)
+	}
 	return roles
 }
 
 func (sg *StateGuild) Emojis() []*ModelGuildEmoji {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.Emojis
+	sg.emojisMu.RLock()
+	defer sg.emojisMu.RUnlock()
+	emojis := make([]*ModelGuildEmoji, 0, len(sg.emojis))
+	for _, e := range sg.emojis {
+		emojis = append(emojis, e)
+	}
+	return emojis
 }
 
 func (sg *StateGuild) Features() []string {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.Features
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.features
 }
 
 func (sg *StateGuild) MFALevel() int {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.MFALevel
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.mfaLevel
 }
 
 func (sg *StateGuild) JoinedAt() time.Time {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	return sg.g.JoinedAt
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	return sg.joinedAt
 }
 
 func (sg *StateGuild) Large() bool {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
 	return sg.large
 }
 
 // No need for this to be exported, just a helper function. Couldn't think of a better name
 func (sg *StateGuild) Unavailable() bool {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
 	return sg.unavailable
 }
 
 func (sg *StateGuild) MemberCount() int {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
 	return sg.memberCount
 }
 
 func (sg *StateGuild) VoiceStates() []*ModelVoiceState {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	voiceStates := make([]*ModelVoiceState, len(sg.voiceStates))
-	copy(voiceStates, sg.voiceStates)
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	voiceStates := make([]*ModelVoiceState, 0, len(sg.voiceStates))
+	for _, vs := range sg.voiceStates {
+		voiceStates = append(voiceStates, vs)
+	}
 	return voiceStates
 }
 
 func (sg *StateGuild) Members() []*ModelGuildMember {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	members := make([]*ModelGuildMember, len(sg.members))
-	copy(members, sg.members)
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	members := make([]*ModelGuildMember, 0, len(sg.members))
+	for _, gm := range sg.members {
+		members = append(members, gm)
+	}
 	return members
 }
 
 func (sg *StateGuild) Channels() []*StateChannel {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	channels := make([]*StateChannel, len(sg.channels))
-	copy(channels, sg.channels)
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	channels := make([]*StateChannel, 0, len(sg.channels))
+	for _, sc := range sg.channels {
+		channels = append(channels, sc)
+	}
 	return channels
 }
 
-func (sg *StateGuild) Presences() []*ModelPresence {
-	sg.mu.RLock()
-	defer sg.mu.RUnlock()
-	presences := make([]*ModelPresence, len(sg.presences))
-	copy(presences, sg.presences)
+func (sg *StateGuild) Presences() []*StatePresence {
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
+	presences := make([]*StatePresence, 0, len(sg.presences))
+	for _, p := range sg.presences {
+		presences = append(presences, p)
+	}
 	return presences
 }
 
 type StateChannel struct {
-	mu    sync.RWMutex
-	c     *ModelChannel
-	guild *StateGuild
-	// TODO another mutex for this?
+	mu       sync.RWMutex
+	c        *ModelChannel
+	guild    *StateGuild
 	messages []*ModelMessage
 }
 
@@ -312,6 +376,59 @@ func (sc *StateChannel) Messages() []*ModelMessage {
 	return messages
 }
 
+type StateUser struct {
+	mu sync.RWMutex
+	u  *ModelUser
+}
+
+func (su *StateUser) ID() string {
+	su.mu.RLock()
+	defer su.mu.RUnlock()
+	return su.u.ID
+}
+
+func (su *StateUser) Username() string {
+	su.mu.RLock()
+	defer su.mu.RUnlock()
+	return su.u.Username
+}
+
+func (su *StateUser) Discriminator() string {
+	su.mu.RLock()
+	defer su.mu.RUnlock()
+	return su.u.Discriminator
+}
+
+func (su *StateUser) Avatar() string {
+	su.mu.RLock()
+	defer su.mu.RUnlock()
+	return su.u.Avatar
+}
+
+func (su *StateUser) Bot() bool {
+	su.mu.RLock()
+	defer su.mu.RUnlock()
+	return su.u.Bot
+}
+
+func (su *StateUser) MFAEnabled() bool {
+	su.mu.RLock()
+	defer su.mu.RUnlock()
+	return su.u.MFAEnabled
+}
+
+func (su *StateUser) Verified() bool {
+	su.mu.RLock()
+	defer su.mu.RUnlock()
+	return su.u.Verified
+}
+
+func (su *StateUser) Email() string {
+	su.mu.RLock()
+	defer su.mu.RUnlock()
+	return su.u.Email
+}
+
 func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {
 	// Access to this is serialized by the Conn goroutines so we don't need to protect it.
 	s.sessionID = e.SessionID
@@ -359,9 +476,9 @@ func (s *State) insertChannel(c *ModelChannel) error {
 	sc.guild = sg
 	sc.mu.Unlock()
 
-	sg.mu.Lock()
+	sg.modelMu.Lock()
 	sg.channels = append(sg.channels, sc)
-	sg.mu.Unlock()
+	sg.modelMu.Unlock()
 
 	return nil
 }
@@ -386,9 +503,9 @@ func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDe
 	for i, sc := range sg.Channels() {
 		// I don't think ID() helper is necessary, but cannot be too safe.
 		if sc.ID() == e.ID {
-			sg.mu.Lock()
+			sg.modelMu.Lock()
 			sg.channels = append(sg.channels[:i], sg.channels[i+1:]...)
-			sg.mu.Unlock()
+			sg.modelMu.Unlock()
 			return nil
 		}
 	}
@@ -442,9 +559,9 @@ func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventGuildUpdate
 	}
 	s.mu.Unlock()
 
-	sg.mu.Lock()
+	sg.modelMu.Lock()
 	sg.g = &e.ModelGuild
-	sg.mu.Unlock()
+	sg.modelMu.Unlock()
 	return nil
 }
 
@@ -457,9 +574,9 @@ func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete
 		return errors.New("non existing guild deleted?")
 	}
 	if e.Unavailable {
-		sg.mu.Lock()
+		sg.modelMu.Lock()
 		sg.unavailable = true
-		sg.mu.Lock()
+		sg.modelMu.Lock()
 	} else {
 		delete(s.guilds, e.ID)
 	}
@@ -484,9 +601,9 @@ func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventGuild
 	if !ok {
 		return errors.New("guild emojis updated for non existing guild")
 	}
-	sg.mu.Lock()
+	sg.modelMu.Lock()
 	sg.g.Emojis = e.Emojis
-	sg.mu.Unlock()
+	sg.modelMu.Unlock()
 	return nil
 }
 
@@ -495,10 +612,10 @@ func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMem
 	if !ok {
 		return errors.New("guild member added in non existing guild")
 	}
-	sg.mu.Lock()
+	sg.modelMu.Lock()
 	sg.memberCount++
 	sg.members = append(sg.members, &e.ModelGuildMember)
-	sg.mu.Unlock()
+	sg.modelMu.Unlock()
 	return nil
 }
 
@@ -509,10 +626,10 @@ func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventGuild
 	}
 	for i, gm := range sg.Members() {
 		if gm.User.ID == e.User.ID {
-			sg.mu.Lock()
+			sg.modelMu.Lock()
 			sg.memberCount--
 			sg.members = append(sg.members[:i], sg.members[i+1:]...)
-			sg.mu.Unlock()
+			sg.modelMu.Unlock()
 			return nil
 		}
 	}
@@ -534,9 +651,9 @@ func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventGuild
 				Mute:     gm.Mute,
 				Nick:     gm.Nick,
 			}
-			sg.mu.Lock()
+			sg.modelMu.Lock()
 			sg.members[i] = gm2
-			sg.mu.Unlock()
+			sg.modelMu.Unlock()
 			return nil
 		}
 	}
