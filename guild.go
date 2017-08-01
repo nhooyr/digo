@@ -61,8 +61,8 @@ type ModelGuildMember struct {
 	Roles    []string   `json:"roles"`
 	JoinedAt time.Time  `json:"joined_at"`
 	// TODO this two are never updated?
-	Deaf     bool       `json:"deaf"`
-	Mute     bool       `json:"mute"`
+	Deaf bool `json:"deaf"`
+	Mute bool `json:"mute"`
 }
 
 type ModelIntegration struct {
