@@ -60,6 +60,7 @@ type ModelGuildMember struct {
 	Nick     *string    `json:"nick"`
 	Roles    []string   `json:"roles"`
 	JoinedAt time.Time  `json:"joined_at"`
+	// TODO this two are never updated?
 	Deaf     bool       `json:"deaf"`
 	Mute     bool       `json:"mute"`
 }

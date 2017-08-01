@@ -13,6 +13,7 @@ TODO why are presence updates given an entire user object? why not just a user i
 TODO presence update for user that was originally offline when bot joined a large guild? Will it contain all fields?
 TODO no message state tracking maybe?
 TODO use map everywhere except for messages, and messages slice will have very low capacity.
+TODO am I overusing sync.RWMutex? Benchmark maybe.
 
 RestAPI does not use One Methods e.g. Channels().One(cID) because too much stutter.
 RestAPI does not have all methods defined on single Client because too little structure and hard code completion/doc finding

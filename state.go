@@ -4,41 +4,8 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 	"time"
 )
-
-// State stored from websocket events.
-type State struct {
-	sessionID string
-
-	// TODO seperate mutex for guilds map, channels map etc?
-	// TODO event handlers send new transformed data further? E.g. not the raw events but StateGuild etc?
-	mu         sync.RWMutex
-	user       *ModelUser
-	dmChannels map[string]*StateChannel
-	guilds     map[string]*StateGuild
-	// I have a seperate map for this because messages only store Channel IDs, no Guild IDs.
-	// So if someone wanted to find the Channel in which a message was sent, they would have to search
-	// all guilds.
-	channels map[string]*StateChannel
-	users    map[string]*ModelUser
-}
-
-func newState() *State {
-	s := &State{
-		dmChannels: make(map[string]*StateChannel),
-		guilds:     make(map[string]*StateGuild),
-		channels:   make(map[string]*StateChannel),
-	}
-	return s
-}
-
-func (s *State) handle(e interface{}, handler EventHandler) {
-	switch e.(type) {
-	// TODO
-	}
-}
 
 type StateGuild struct {
 	modelMu                         sync.RWMutex
@@ -54,15 +21,11 @@ type StateGuild struct {
 	embedChannelID                  string
 	verificationLevel               int
 	defaultMessageNotificationLevel int
+	roles                           map[string]*ModelRole
+	emojis                          []*ModelGuildEmoji
 	features                        []string
 	mfaLevel                        int
 	joinedAt                        time.Time
-
-	rolesMu sync.RWMutex
-	roles   map[string]*ModelRole
-
-	emojisMu sync.RWMutex
-	emojis   []*ModelGuildEmoji
 
 	large       bool
 	unavailable bool
@@ -71,7 +34,7 @@ type StateGuild struct {
 	voiceStates   map[string]*ModelVoiceState
 
 	membersMu   sync.RWMutex
-	members     map[string]*StateGuildMember
+	members     map[string]*ModelGuildMember
 	memberCount int
 
 	channelsMu sync.RWMutex
@@ -80,6 +43,31 @@ type StateGuild struct {
 	presencesMu sync.RWMutex
 	// TODO how should I handle improperly typed updates?
 	presences map[string]*StatePresence
+}
+
+func (sg *StateGuild) updateFromModel(g *ModelGuild) {
+	sg.modelMu.Lock()
+	sg.id = g.ID
+	sg.name = g.Name
+	sg.icon = g.Icon
+	sg.splash = g.Splash
+	sg.ownerID = g.OwnerID
+	sg.region = g.Region
+	sg.afkChannelID = g.AFKChannelID
+	sg.afkTimeout = g.AFKTimeout
+	sg.embedEnabled = g.EmbedEnabled
+	sg.embedChannelID = g.EmbedChannelID
+	sg.verificationLevel = g.VerificationLevel
+	sg.defaultMessageNotificationLevel = g.DefaultMessageNotificationLevel
+	sg.roles = make(map[string]*ModelRole)
+	for _, r := range g.Roles {
+		sg.roles[r.ID] = r
+	}
+	sg.emojis = g.Emojis
+	sg.features = g.Features
+	sg.mfaLevel = g.MFALevel
+	sg.joinedAt = g.JoinedAt
+	sg.modelMu.Unlock()
 }
 
 func (sg *StateGuild) ID() string {
@@ -156,15 +144,15 @@ func (sg *StateGuild) DefaultMessageNotificationLevel() int {
 }
 
 func (sg *StateGuild) Role(rID string) (*ModelRole, bool) {
-	sg.rolesMu.RLock()
-	defer sg.rolesMu.RUnlock()
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
 	r, ok := sg.roles[rID]
 	return r, ok
 }
 
 func (sg *StateGuild) Roles() []*ModelRole {
-	sg.rolesMu.RLock()
-	defer sg.rolesMu.RUnlock()
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
 	roles := make([]*ModelRole, 0, len(sg.roles))
 	for _, r := range sg.roles {
 		roles = append(roles, r)
@@ -173,8 +161,8 @@ func (sg *StateGuild) Roles() []*ModelRole {
 }
 
 func (sg *StateGuild) Emojis() []*ModelGuildEmoji {
-	sg.emojisMu.RLock()
-	defer sg.emojisMu.RUnlock()
+	sg.modelMu.RLock()
+	defer sg.modelMu.RUnlock()
 	emojis := make([]*ModelGuildEmoji, len(sg.emojis))
 	copy(emojis, sg.emojis)
 	return emojis
@@ -219,17 +207,17 @@ func (sg *StateGuild) MemberCount() int {
 	return sg.memberCount
 }
 
-func (sg *StateGuild) Member(uID string) (*StateGuildMember, bool) {
+func (sg *StateGuild) Member(uID string) (*ModelGuildMember, bool) {
 	sg.membersMu.RLock()
 	defer sg.membersMu.RUnlock()
 	sgm, ok := sg.members[uID]
 	return sgm, ok
 }
 
-func (sg *StateGuild) Members() []*StateGuildMember {
+func (sg *StateGuild) Members() []*ModelGuildMember {
 	sg.membersMu.RLock()
 	defer sg.membersMu.RUnlock()
-	members := make([]*StateGuildMember, 0, len(sg.members))
+	members := make([]*ModelGuildMember, 0, len(sg.members))
 	for _, gm := range sg.members {
 		members = append(members, gm)
 	}
@@ -270,84 +258,8 @@ func (sg *StateGuild) Presences() []*StatePresence {
 	return presences
 }
 
-type StateUser struct {
-	refs int64
-
-	mu sync.RWMutex
-	u  *ModelUser
-}
-
-func (su *StateUser) ID() string {
-	su.mu.RLock()
-	defer su.mu.RUnlock()
-	return su.u.ID
-}
-
-func (su *StateUser) Username() string {
-	su.mu.RLock()
-	defer su.mu.RUnlock()
-	return su.u.Username
-}
-
-func (su *StateUser) Discriminator() string {
-	su.mu.RLock()
-	defer su.mu.RUnlock()
-	return su.u.Discriminator
-}
-
-func (su *StateUser) Avatar() string {
-	su.mu.RLock()
-	defer su.mu.RUnlock()
-	return su.u.Avatar
-}
-
-func (su *StateUser) Bot() bool {
-	su.mu.RLock()
-	defer su.mu.RUnlock()
-	return su.u.Bot
-}
-
-func (su *StateUser) MFAEnabled() bool {
-	su.mu.RLock()
-	defer su.mu.RUnlock()
-	return su.u.MFAEnabled
-}
-
-func (su *StateUser) Verified() bool {
-	su.mu.RLock()
-	defer su.mu.RUnlock()
-	return su.u.Verified
-}
-
-func (su *StateUser) Email() string {
-	su.mu.RLock()
-	defer su.mu.RUnlock()
-	return su.u.Email
-}
-
-func (su *StateUser) getRefs() int64 {
-	return atomic.LoadInt64(&su.refs)
-}
-
-func (su *StateUser) incrementRefs() {
-	atomic.AddInt64(&su.refs, 1)
-}
-
-func (su *StateUser) decrementRefs() int64 {
-	return atomic.AddInt64(&su.refs, -1)
-}
-
-type StateGuildMember struct {
-	User     *StateUser
-	Nick     *string
-	Roles    []string
-	JoinedAt time.Time
-	Deaf     bool
-	Mute     bool
-}
-
 type StatePresence struct {
-	UserID string
+	UserID *ModelUser
 	Game   *ModelGame
 	Status string
 }
@@ -365,12 +277,13 @@ type StateChannel struct {
 	lastMessageID        string
 	bitrate              int
 	userLimit            int
-	recipients           []*StateUser
+	recipients           []*ModelUser
 	icon                 string
 	ownerID              string
 	applicationID        string
 
-	messages []*ModelMessage
+	messagesMu sync.RWMutex
+	messages   []*ModelMessage
 }
 
 func (sc *StateChannel) ID() string {
@@ -435,10 +348,10 @@ func (sc *StateChannel) UserLimit() int {
 	return sc.userLimit
 }
 
-func (sc *StateChannel) Recipients() []*StateUser {
+func (sc *StateChannel) Recipients() []*ModelUser {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
-	recipients := make([]*StateUser, len(sc.recipients))
+	recipients := make([]*ModelUser, len(sc.recipients))
 	copy(recipients, sc.recipients)
 	return recipients
 }
@@ -463,26 +376,112 @@ func (sc *StateChannel) ApplicationID() string {
 
 // Messages returns a copy of the current messages. The last message is the most recent.
 func (sc *StateChannel) Messages() []*ModelMessage {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
+	sc.messagesMu.RLock()
+	defer sc.messagesMu.RUnlock()
 	messages := make([]*ModelMessage, len(sc.messages))
 	copy(messages, sc.messages)
 	return messages
+}
+
+func (sc *StateChannel) updateFromModel(c *ModelChannel) {
+	sc.mu.Lock()
+	sc.id = c.ID
+	sc.chanType = c.Type
+	sc.position = c.Position
+	sc.permissionOverwrites = c.PermissionOverwrites
+	sc.name = c.Name
+	sc.topic = c.Topic
+	sc.lastMessageID = c.LastMessageID
+	sc.bitrate = c.Bitrate
+	sc.userLimit = c.UserLimit
+	sc.recipients = c.Recipients
+	sc.icon = c.Icon
+	sc.ownerID = c.OwnerID
+	sc.applicationID = c.ApplicationID
+	sc.mu.Unlock()
+}
+
+func (sc *StateChannel) appendMessage() {
+
+}
+
+// State stored from websocket events.
+// TODO later use exported methods to get stuff like Channel out. I handwrote the locking/unlocking code for now.
+type State struct {
+	sessionID string
+
+	// TODO event handlers send new transformed data further? E.g. not the raw events but StateGuild etc?
+	// TODO does the user update event only apply to the current user or all users?
+	userMu sync.RWMutex
+	user   *ModelUser
+
+	dmChannelsMu sync.RWMutex
+	dmChannels   map[string]*StateChannel
+
+	guildsMu sync.RWMutex
+	guilds   map[string]*StateGuild
+	// I have a seperate map for this because messages only store Channel IDs, no Guild IDs.
+	// So if someone wanted to find the Channel in which a message was sent, they would have to search
+	// all guilds.
+	// TODO rename to guildChannels
+	// TODO maybe seperate mutex for this? Care at delete guild, which needs to lock both.
+	// TODO should I use multiple mutxes in the guild state for roles etc.
+	channels   map[string]*StateChannel
+}
+
+func (s *State) Guild(gID string) (*StateGuild, bool) {
+	s.guildsMu.Lock()
+	sg, ok := s.guilds[gID]
+	s.guildsMu.Unlock()
+	return sg, ok
+}
+
+func (s *State) Channel(cID string) (*StateChannel, bool) {
+	// Check Guild Channels first, DMChannels are used less often.
+	s.guildsMu.Lock()
+	sc, ok := s.channels[cID]
+	s.guildsMu.Unlock()
+	if !ok {
+		s.dmChannelsMu.Lock()
+		sc, ok = s.dmChannels[cID]
+		s.dmChannelsMu.Unlock()
+	}
+	return sc, ok
+}
+
+func (s *State) handle(e interface{}, handler EventHandler) {
+	switch e.(type) {
+	// TODO
+	}
 }
 
 func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {
 	// Access to this is serialized by the Conn goroutines so we don't need to protect it.
 	s.sessionID = e.SessionID
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.userMu.Lock()
 	s.user = e.User
+	s.userMu.Unlock()
+
+	s.dmChannelsMu.Lock()
+	s.dmChannels = make(map[string]*StateChannel)
 	for _, c := range e.PrivateChannels {
-		s.dmChannels[c.ID] = &StateChannel{c: c}
+		sc := new(StateChannel)
+		sc.updateFromModel(c)
+		s.dmChannels[c.ID] = sc
 	}
+	s.dmChannelsMu.Unlock()
+
+	s.guildsMu.Lock()
+	s.guilds = make(map[string]*StateGuild)
 	for _, ee := range e.Guilds {
-		s.guilds[ee.ID] = &StateGuild{g: &ee.ModelGuild, unavailable: ee.Unavailable}
+		s.guilds[ee.ID] = &StateGuild{id: ee.ID, unavailable: ee.Unavailable}
 	}
+	s.guildsMu.Unlock()
+
+	s.guildsMu.Lock()
+	s.channels = make(map[string]*StateChannel)
+	s.guildsMu.Unlock()
 	return nil
 }
 
@@ -495,92 +494,93 @@ func (s *State) updateChannel(ctx context.Context, conn *Conn, e *EventChannelUp
 }
 
 func (s *State) insertChannel(c *ModelChannel) error {
-	sc := &StateChannel{c: c}
-
-	s.mu.Lock()
-
 	if c.Type == ModelChannelTypeDM || c.Type == ModelChannelTypeGroupDM {
-		s.dmChannels[c.ID] = sc
-		s.mu.Unlock()
+		s.dmChannelsMu.RLock()
+		sc, ok := s.dmChannels[c.ID]
+		s.dmChannelsMu.RUnlock()
+		if !ok {
+			sc = new(StateChannel)
+		}
+		sc.updateFromModel(c)
+		if !ok {
+			s.dmChannelsMu.Lock()
+			s.dmChannels[c.ID] = sc
+			s.dmChannelsMu.Unlock()
+		}
 		return nil
 	}
 
-	s.channels[c.ID] = sc
-	sg, ok := s.guilds[c.GuildID]
-	s.mu.Unlock()
+	s.guildsMu.RLock()
+	sc, ok := s.channels[c.ID]
+	s.guildsMu.RUnlock()
 
+	if ok {
+		sc.updateFromModel(c)
+		return nil
+	}
+
+	sg, ok := s.Guild(c.ID)
 	if !ok {
 		return errors.New("a channel created/updated for an unknown guild")
 	}
 
-	sc.mu.Lock()
-	sc.guild = sg
-	sc.mu.Unlock()
-
-	sg.modelMu.Lock()
-	sg.channels = append(sg.channels, sc)
-	sg.modelMu.Unlock()
-
+	sc, ok = sg.Channel(c.ID)
+	if !ok {
+		sc = new(StateChannel)
+	}
+	sc.updateFromModel(c)
+	if !ok {
+		sg.channelsMu.Lock()
+		sg.channels[c.ID] = sc
+		sg.channelsMu.Unlock()
+	}
 	return nil
 }
 
 func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDelete) error {
-	s.mu.Lock()
-
 	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
+		s.dmChannelsMu.Lock()
 		delete(s.dmChannels, e.ID)
-		s.mu.Unlock()
+		s.dmChannelsMu.Unlock()
 		return nil
 	}
 
+	s.guildsMu.Lock()
 	delete(s.channels, e.ID)
-	sg, ok := s.guilds[e.GuildID]
-	s.mu.Unlock()
+	s.guildsMu.Unlock()
 
+	sg, ok := s.Guild(e.ID)
 	if !ok {
 		return errors.New("a channel deleted for an unknown guild")
 	}
 
-	for i, sc := range sg.Channels() {
-		// I don't think ID() helper is necessary, but cannot be too safe.
-		if sc.ID() == e.ID {
-			sg.modelMu.Lock()
-			sg.channels = append(sg.channels[:i], sg.channels[i+1:]...)
-			sg.modelMu.Unlock()
-			return nil
-		}
-	}
-	return errors.New("channel removed from a guild in which it never existed?")
+	sg.channelsMu.Lock()
+	delete(sg.channels, e.ID)
+	sg.channelsMu.Unlock()
+	return nil
 }
 
 var errHandled = errors.New("no need to handle the event further")
 
 func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate) error {
-	sg := &StateGuild{
-		g:           &e.ModelGuild,
-		large:       e.Large,
-		unavailable: e.Unavailable,
-		memberCount: e.MemberCount,
-		voiceStates: e.VoiceStates,
-		members:     e.Members,
-		presences:   e.Presences,
-	}
+	sg := new(StateGuild)
+	sg.updateFromModel(&e.ModelGuild)
 
-	s.mu.Lock()
+	s.guildsMu.Lock()
 	for _, c := range e.Channels {
-		sc := &StateChannel{
-			c:     c,
-			guild: sg,
-		}
-		sg.channels = append(sg.channels, sc)
+		sc := new(StateChannel)
+		// TODO updateFromModel locks but this is a new StateChannel
+		sc.updateFromModel(c)
+		sg.channels[c.ID] = sc
 		s.channels[c.ID] = sc
 	}
+
 	sgOld, ok := s.guilds[e.ID]
 	s.guilds[e.ID] = sg
-	defer s.mu.Unlock()
+	s.guildsMu.Unlock()
 
 	if ok {
-		if sgOld.Unavailable() {
+		if sgOld.unavailable {
 			// Guild is available again or was lazily loaded.
 			// Either way, don't run any GuildCreate event handlers.
 			return errHandled
@@ -593,49 +593,36 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 }
 
 func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventGuildUpdate) error {
-	s.mu.Lock()
-	sg, ok := s.guilds[e.ID]
+	sg, ok := s.Guild(e.ID)
 	if !ok {
 		return errors.New("non existing guild updated?")
 	}
-	s.mu.Unlock()
-
-	sg.modelMu.Lock()
-	sg.g = &e.ModelGuild
-	sg.modelMu.Unlock()
+	sg.updateFromModel(&e.ModelGuild)
 	return nil
 }
 
 func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	s.guildsMu.Lock()
+	defer s.guildsMu.Unlock()
 	sg, ok := s.guilds[e.ID]
 	if !ok {
-		return errors.New("non existing guild deleted?")
+		return errors.New("non existing guild deleted")
 	}
 	if e.Unavailable {
-		sg.modelMu.Lock()
-		sg.unavailable = true
-		sg.modelMu.Lock()
+		s.guilds[e.ID] = &StateGuild{
+			unavailable: true,
+		}
 	} else {
 		delete(s.guilds, e.ID)
 	}
-	for _, sc := range sg.channels {
+	for id := range sg.channels {
 		// I don't think ID() helper is necessary, but cannot be too safe.
-		delete(s.channels, sc.ID())
+		delete(s.channels, id)
 	}
 	return nil
 }
 
 // TODO maybe guild ban add and guild ban remove? Not sure....
-
-func (s *State) Guild(id string) (*StateGuild, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	sg, ok := s.guilds[id]
-	return sg, ok
-}
 
 func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventGuildEmojisUpdate) error {
 	sg, ok := s.Guild(e.GuildID)
@@ -643,7 +630,7 @@ func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventGuild
 		return errors.New("guild emojis updated for non existing guild")
 	}
 	sg.modelMu.Lock()
-	sg.g.Emojis = e.Emojis
+	sg.emojis = e.Emojis
 	sg.modelMu.Unlock()
 	return nil
 }
@@ -653,10 +640,10 @@ func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMem
 	if !ok {
 		return errors.New("guild member added in non existing guild")
 	}
-	sg.modelMu.Lock()
+	sg.membersMu.Lock()
 	sg.memberCount++
-	sg.members = append(sg.members, &e.ModelGuildMember)
-	sg.modelMu.Unlock()
+	sg.members[e.User.ID] = &e.ModelGuildMember
+	sg.membersMu.Unlock()
 	return nil
 }
 
@@ -665,16 +652,11 @@ func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventGuild
 	if !ok {
 		return errors.New("guild member removed in non existing guild")
 	}
-	for i, gm := range sg.Members() {
-		if gm.User.ID == e.User.ID {
-			sg.modelMu.Lock()
-			sg.memberCount--
-			sg.members = append(sg.members[:i], sg.members[i+1:]...)
-			sg.modelMu.Unlock()
-			return nil
-		}
-	}
-	return errors.New("guild member removed in a guild in which it never joined?")
+	sg.membersMu.Lock()
+	sg.memberCount--
+	delete(sg.members, e.User.ID)
+	sg.membersMu.Unlock()
+	return nil
 }
 
 func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberUpdate) error {
@@ -682,23 +664,21 @@ func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventGuild
 	if !ok {
 		return errors.New("guild member updated in non existing guild")
 	}
-	for i, gm := range sg.Members() {
-		if gm.User.ID == e.User.ID {
-			gm2 := &ModelGuildMember{
-				User:     gm.User,
-				Roles:    e.Roles,
-				JoinedAt: gm.JoinedAt,
-				Deaf:     gm.Deaf,
-				Mute:     gm.Mute,
-				Nick:     gm.Nick,
-			}
-			sg.modelMu.Lock()
-			sg.members[i] = gm2
-			sg.modelMu.Unlock()
-			return nil
-		}
+	sg.membersMu.Lock()
+	defer sg.membersMu.Unlock()
+	gm, ok := sg.members[e.User.ID]
+	if !ok {
+		return errors.New("guild member updated in a guild in which it never joined?")
 	}
-	return errors.New("guild member updated in a guild in which it never joined?")
+	sg.members[e.User.ID] = &ModelGuildMember{
+		User: &e.User,
+		Roles: e.Roles,
+		JoinedAt: gm.JoinedAt,
+		Deaf: gm.Deaf,
+		Mute: gm.Mute,
+		Nick: &e.Nick,
+	}
+	return nil
 }
 
 // TODO not sure how to handle this stuff

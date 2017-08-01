@@ -94,7 +94,7 @@ func NewDialConfig() *DialConfig {
 
 func Dial(config *DialConfig) (*Conn, error) {
 	c := &Conn{
-		State: newState(),
+		State: new(State),
 
 		Client:       config.Client,
 		eventHandler: config.EventHandler,
