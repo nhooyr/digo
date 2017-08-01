@@ -12,8 +12,11 @@ import (
 
 	"context"
 
+	"math/rand"
+
+	"log"
+
 	"github.com/gorilla/websocket"
-	"github.com/nhooyr/log"
 )
 
 type endpointGateway struct {
@@ -32,45 +35,97 @@ func (g endpointGateway) get() (url string, err error) {
 	return urlStruct.URL, g.doMethod("GET", nil, &urlStruct)
 }
 
+type EventHandler interface {
+	Handle(ctx context.Context, conn *Conn, e interface{})
+}
+
 type Conn struct {
-	Client   *Client
-	EventMux eventMux
+	Client *Client
+	State  *State
 
-	internalEventMux eventMux
-	gatewayURL       string
+	eventHandler EventHandler
+	errorHandler func(err error)
+	logf         func(format string, v ...interface{})
 
-	sessionID string
+	gatewayURL string
+	sessionID  string
 
 	closeChan chan struct{}
 	wg        sync.WaitGroup
 
+	shard        *[2]int
+	lastIdentify time.Time
+	ready        bool
+	resuming     bool
+
 	reconnectChan chan struct{}
 
-	wsConn *websocket.Conn
+	// TODO use other websocket package, it's better for my usecase.
+	wsConn    *websocket.Conn
+	writeChan chan *sentPayload
 
-	mu                    sync.Mutex
+	heartbeatMu           sync.Mutex
 	heartbeatAcknowledged bool
 	sequenceNumber        int
 }
 
-func NewConn() *Conn {
-	internalEventMux := newEventMux()
-	internalEventMux.Register(func(ctx context.Context, conn *Conn, e *eventReady) {
-		conn.sessionID = e.SessionID
-	})
-	return &Conn{
-		internalEventMux: internalEventMux,
-		EventMux:         newEventMux(),
-		closeChan:        make(chan struct{}),
-		reconnectChan:    make(chan struct{}),
+type DialConfig struct {
+	Client       *Client
+	EventHandler EventHandler
+	// May be called concurrently.
+	ErrorHandler func(err error)
+	// May be called concurrently.
+	Logf func(format string, v ...interface{})
+
+	Shard       int
+	ShardsCount int
+}
+
+func NewDialConfig() *DialConfig {
+	return &DialConfig{
+		ErrorHandler: func(err error) {
+			log.Print(err)
+		},
+		Logf: func(format string, v ...interface{}) {
+			log.Printf(format, v...)
+		},
 	}
 }
 
-// TODO maybe take context.Context? though I doubt it's necessary
-func (c *Conn) Dial() (err error) {
+func Dial(config *DialConfig) (*Conn, error) {
+	c := &Conn{
+		State: new(State),
+
+		Client:       config.Client,
+		eventHandler: config.EventHandler,
+		errorHandler: config.ErrorHandler,
+		logf:         config.Logf,
+
+		closeChan:     make(chan struct{}),
+		reconnectChan: make(chan struct{}),
+		writeChan:     make(chan *sentPayload),
+		ready:         true,
+	}
+	if config.ShardsCount > 1 {
+		c.shard = &[2]int{config.Shard, config.ShardsCount}
+	}
+	return c, c.dial()
+}
+
+// If it errors without receiving a operationDispatch payload, then
+// this method will always return an error.
+func (c *Conn) dial() (err error) {
+	if !c.ready {
+		return errors.New("already tried to connect and failed")
+	}
+
+	c.ready = false
+	c.resuming = false
 	c.heartbeatAcknowledged = true
+	c.lastIdentify = time.Time{}
 
 	if c.gatewayURL == "" {
+		// TODO hardcoding this means we cannot use the bot gateway endpoint that returns the # of shards to use.
 		c.gatewayURL, err = c.Client.gateway().get()
 		if err != nil {
 			return err
@@ -85,18 +140,41 @@ func (c *Conn) Dial() (err error) {
 		return err
 	}
 
-	if c.sessionID == "" {
-		err = c.identify()
-	} else {
-		err = c.resume()
-	}
-	if err != nil {
-		return err
-	}
-
 	go c.manager()
 
 	return nil
+}
+
+func (c *Conn) manager() {
+	ctx, cancelFn := context.WithCancel(context.Background())
+	c.runWorker(func() {
+		c.writeLoop(ctx)
+	})
+	c.runWorker(func() {
+		c.readLoop(ctx)
+	})
+
+	if c.State.sessionID == "" {
+		c.identify(ctx)
+	} else {
+		c.resume(ctx)
+	}
+
+	select {
+	case <-c.reconnectChan:
+		cancelFn()
+		c.wg.Wait()
+
+		err := c.dial()
+		if err != nil {
+			c.log(err)
+		}
+	case <-c.closeChan:
+		cancelFn()
+		c.wg.Wait()
+
+		c.closeChan <- struct{}{}
+	}
 }
 
 const (
@@ -120,11 +198,73 @@ type sentPayload struct {
 	Sequence  int         `json:"s,omitempty"`
 }
 
+func (c *Conn) writeLoop(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+
+	writesLeft := 120
+	var err error
+
+writeLoop:
+	for {
+		select {
+		case p := <-c.writeChan:
+			if writesLeft == 0 {
+				select {
+				case <-t.C:
+					writesLeft = 120
+				case <-ctx.Done():
+					break writeLoop
+				}
+			}
+
+			writesLeft--
+
+			_, ok := p.Data.(*dataOpIdentify)
+			if ok {
+				now := time.Now()
+				resetTime := c.lastIdentify.Add(5 * time.Second)
+				time.Sleep(resetTime.Sub(now))
+			}
+
+			err := c.wsConn.WriteJSON(p)
+			if err != nil {
+				c.errorHandler(err)
+				select {
+				case c.reconnectChan <- struct{}{}:
+				case <-ctx.Done():
+				}
+				break writeLoop
+			}
+
+			if ok {
+				c.lastIdentify = time.Now()
+			}
+		case <-t.C:
+			writesLeft = 120
+		case <-ctx.Done():
+			break writeLoop
+		}
+	}
+
+	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
+	err = c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
+	if err != nil {
+		c.errorHandler(err)
+	}
+
+	err = c.wsConn.Close()
+	if err != nil {
+		c.errorHandler(err)
+	}
+}
+
 type dataOpIdentify struct {
 	Token          string             `json:"token"`
 	Properties     identifyProperties `json:"properties"`
 	Compress       bool               `json:"compress"`
 	LargeThreshold int                `json:"large_threshold"`
+	Shard          *[2]int            `json:"shard,omitempty"`
 }
 
 type identifyProperties struct {
@@ -133,7 +273,14 @@ type identifyProperties struct {
 	Device  string `json:"$device,omitempty"`
 }
 
-func (c *Conn) identify() error {
+func (c *Conn) write(ctx context.Context, p *sentPayload) {
+	select {
+	case c.writeChan <- p:
+	case <-ctx.Done():
+	}
+}
+
+func (c *Conn) identify(ctx context.Context) {
 	p := &sentPayload{
 		Operation: operationIdentify,
 		Data: dataOpIdentify{
@@ -144,9 +291,11 @@ func (c *Conn) identify() error {
 			},
 			Compress:       true,
 			LargeThreshold: 250,
+			Shard:          c.shard,
 		},
 	}
-	return c.wsConn.WriteJSON(p)
+
+	c.write(ctx, p)
 }
 
 type dataOpResume struct {
@@ -155,47 +304,20 @@ type dataOpResume struct {
 	Seq       int    `json:"seq"`
 }
 
-func (c *Conn) resume() error {
-	c.mu.Lock()
+func (c *Conn) resume(ctx context.Context) {
+	c.resuming = true
+
+	c.heartbeatMu.Lock()
 	p := &sentPayload{
 		Operation: operationResume,
 		Data: dataOpResume{
 			Token:     c.Client.Token,
-			SessionID: c.sessionID,
+			SessionID: c.State.sessionID,
 			Seq:       c.sequenceNumber,
 		},
 	}
-	c.mu.Unlock()
-	return c.wsConn.WriteJSON(p)
-}
-
-func (c *Conn) manager() {
-	ctx, cancelFn := context.WithCancel(context.Background())
-	c.runWorker(func() {
-		c.readLoop(ctx)
-	})
-	select {
-	case <-c.reconnectChan:
-		cancelFn()
-		err := c.close()
-		if err != nil {
-			log.Print(err)
-		}
-		c.wg.Wait()
-
-		err = c.Dial()
-		if err != nil {
-			log.Print(err)
-		}
-	case <-c.closeChan:
-		cancelFn()
-		err := c.close()
-		if err != nil {
-			log.Print(err)
-		}
-		c.wg.Wait()
-		c.closeChan <- struct{}{}
-	}
+	c.heartbeatMu.Unlock()
+	c.write(ctx, p)
 }
 
 func (c *Conn) runWorker(fn func()) {
@@ -218,7 +340,7 @@ func (c *Conn) readLoop(ctx context.Context) {
 		p, err := c.readPayload()
 		if err != nil {
 			if !isUseOfClosedError(err) {
-				log.Print(err)
+				c.errorHandler(err)
 				// It's possible we're being shutdown right now too.
 				// Or maybe manager is already trying to reconnect.
 				select {
@@ -229,17 +351,17 @@ func (c *Conn) readLoop(ctx context.Context) {
 			return
 		}
 
-		log.Print(p.Operation)
+		c.log(p.Operation)
 		if p.Type != "" {
-			log.Print(p.Type)
+			c.log(p.Type)
 		}
-		log.Print(p.SequenceNumber)
-		log.Printf("%s", p.Data)
-		log.Print()
+		c.log(p.SequenceNumber)
+		c.logf("%s", p.Data)
+		c.log("\n")
 
 		err = c.onPayload(ctx, p)
 		if err != nil {
-			log.Print(err)
+			c.errorHandler(err)
 			// It's possible we're being shutdown right now.
 			// Or maybe manager is already trying to reconnect.
 			select {
@@ -267,6 +389,7 @@ func (c *Conn) readPayload() (*receivedPayload, error) {
 		return &p, json.NewDecoder(z).Decode(&p)
 	case websocket.TextMessage:
 		return &p, json.NewDecoder(r).Decode(&p)
+		// TODO handle close frames!!! print out the error code. Probably with new web socket package.
 	default:
 		return nil, errors.New("unexpected websocket message type")
 	}
@@ -302,27 +425,73 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 			c.heartbeatLoop(ctx, hello.HeartbeatInterval)
 		})
 	case operationHeartbeatACK:
-		c.mu.Lock()
+		c.heartbeatMu.Lock()
 		c.heartbeatAcknowledged = true
-		c.mu.Unlock()
+		c.heartbeatMu.Unlock()
 	case operationInvalidSession:
-		// Wait out the possible rate limit.
-		// TODO Need to have a max limit on this, only one time imo.
-		time.Sleep(time.Second * 5)
-		err := c.identify()
+		var resumable bool
+		err := json.Unmarshal(p.Data, &resumable)
 		if err != nil {
 			return err
 		}
+
+		if resumable {
+			c.resume(ctx)
+		} else {
+			// We closed the connection and tried resuming but were too late.
+			// If c.ready, the connection was not closed prior to resuming but rather we are
+			// responding to our active session becoming expired and it turns out we were too late
+			// to resume. In that case, we do not need to wait the random duration to stagger reconnects because
+			// it won't help and we're not reconnecting. If we were too late to resume, it's safe to the gateway is
+			// not under crazy load.
+			if !c.ready && c.resuming {
+				// Sleep for a random amount of time between 1 and 5 seconds.
+				randDur := time.Duration(rand.Int63n(4*int64(time.Second))) + 1
+				time.Sleep(randDur)
+			}
+			c.identify(ctx)
+		}
+
 	case operationReconnect:
 		return errors.New("reconnect operation")
 	case operationDispatch:
-		c.mu.Lock()
-		c.sequenceNumber = p.SequenceNumber
-		c.mu.Unlock()
+		c.ready = true
+		c.resuming = false
 
-		err := c.internalEventMux.route(ctx, c, p, true)
+		c.heartbeatMu.Lock()
+		c.sequenceNumber = p.SequenceNumber
+		c.heartbeatMu.Unlock()
+
+		fn, err := c.State.eventMux.getHandler(ctx, c, p)
 		if err != nil {
 			return err
+		}
+
+		if fn != nil {
+			ehErr := fn()
+			if ehErr != nil {
+				if ehErr.Err == errHandled {
+					return nil
+				}
+				// State has been corrupted somehow. E.g. a message created for a non existing guild.
+				// Or a reaction for a non existing message. Something went wrong. We should reconnect.
+				return err
+			}
+		}
+
+		fn, err = c.eventMux.getHandler(ctx, c, p)
+		if err != nil {
+			// The State eventMux should have errored. This should be impossible.
+			panic(err)
+		}
+
+		if fn != nil {
+			c.runWorker(func() {
+				err = fn()
+				if err != nil {
+					c.errorHandler(err)
+				}
+			})
 		}
 	default:
 		panic("discord gone crazy; unexpected operation type")
@@ -331,14 +500,14 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 }
 
 func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
-	ticker := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
-	defer ticker.Stop()
+	t := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
+	defer t.Stop()
 	for {
 		select {
-		case <-ticker.C:
+		case <-t.C:
 			err := c.heartbeat()
 			if err != nil {
-				log.Print(err)
+				c.log(err)
 				// Either we signal a reconnect or we have been signaled to close.
 				select {
 				case c.reconnectChan <- struct{}{}:
@@ -353,32 +522,27 @@ func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
 }
 
 func (c *Conn) heartbeat() error {
-	c.mu.Lock()
+	c.heartbeatMu.Lock()
 	if !c.heartbeatAcknowledged {
-		c.mu.Unlock()
+		c.heartbeatMu.Unlock()
 		return errors.New("heartbeat not acknowledged")
 	}
 	sequenceNumber := c.sequenceNumber
 	c.heartbeatAcknowledged = false
-	c.mu.Unlock()
+	c.heartbeatMu.Unlock()
 
 	p := &sentPayload{Operation: operationHeartbeat, Data: sequenceNumber}
 	return c.wsConn.WriteJSON(p)
 }
 
-func (c *Conn) close() error {
-	// TODO I think this should be OK, but I'm not sure. Should there be a writerLoop routine to sync writes?
-	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
-	err := c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
-	err2 := c.wsConn.Close()
-	if err != nil {
-		return err
-	}
-	return err2
-}
-
+// Close closes the connection. It never returns an error.
+// All errors will be handled by the ErrorHandler given in the DialConfig.
 func (c *Conn) Close() error {
 	c.closeChan <- struct{}{}
 	<-c.closeChan
 	return nil
+}
+
+func (c *Conn) log(v interface{}) {
+	c.logf("%v", v)
 }

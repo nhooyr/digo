@@ -1,15 +1,15 @@
 package discgo
 
 type ModelVoiceState struct {
-	GuildID   *string `json:"guild_id"`
-	ChannelID string  `json:"channel_id"`
-	UserID    string  `json:"user_id"`
-	SessionID string  `json:"session_id"`
-	Deaf      bool    `json:"deaf"`
-	Mute      bool    `json:"mute"`
-	SelfDeaf  bool    `json:"self_deaf"`
-	SelfMute  bool    `json:"self_mute"`
-	Suppress  bool    `json:"suppress"`
+	GuildID   string `json:"guild_id"`
+	ChannelID string `json:"channel_id"`
+	UserID    string `json:"user_id"`
+	SessionID string `json:"session_id"`
+	Deaf      bool   `json:"deaf"`
+	Mute      bool   `json:"mute"`
+	SelfDeaf  bool   `json:"self_deaf"`
+	SelfMute  bool   `json:"self_mute"`
+	Suppress  bool   `json:"suppress"`
 }
 
 type ModelVoiceRegion struct {

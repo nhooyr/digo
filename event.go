@@ -1,17 +1,17 @@
 package discgo
 
 import (
-	"context"
 	"encoding/json"
-	"reflect"
+	"fmt"
 )
 
 type eventReady struct {
-	V               int             `json:"v"`
-	User            *ModelUser      `json:"user"`
-	PrivateChannels []*ModelChannel `json:"private_channels"`
-	SessionID       string          `json:"session_id"`
-	Trace           []string        `json:"_trace"`
+	V               int                 `json:"v"`
+	User            *ModelUser          `json:"user"`
+	PrivateChannels []*ModelChannel     `json:"private_channels"`
+	Guilds          []*EventGuildCreate `json:"guilds"`
+	SessionID       string              `json:"session_id"`
+	Trace           []string            `json:"_trace"`
 }
 
 type eventResumed struct {
@@ -19,23 +19,36 @@ type eventResumed struct {
 }
 
 type EventChannelCreate struct {
-	ModelChannel `json:"-"`
+	ModelChannel
 }
 
 type EventChannelUpdate struct {
-	ModelChannel `json:"-"`
+	ModelChannel
 }
 
 type EventChannelDelete struct {
-	ModelChannel `json:"-"`
+	ModelChannel
 }
 
 type EventGuildCreate struct {
-	ModelGuild `json:"-"`
+	ModelGuild
+	Large       bool                `json:"large"`
+	Unavailable bool                `json:"unavailable"`
+	MemberCount int                 `json:"member_count"`
+	VoiceStates []*ModelVoiceState  `json:"voice_states"` // without guild_id key
+	Members     []*ModelGuildMember `json:"members"`
+	Channels    []*ModelChannel     `json:"channels"`
+	Presences   []*ModelPresence    `json:"presences"`
+}
+
+type ModelPresence struct {
+	User   ModelUser  `json:"user"`
+	Game   *ModelGame `json:"game"`
+	Status string     `json:"status"`
 }
 
 type EventGuildUpdate struct {
-	ModelGuild `json:"-"`
+	ModelGuild
 }
 
 type EventGuildDelete struct {
@@ -44,13 +57,13 @@ type EventGuildDelete struct {
 }
 
 type EventGuildBanAdd struct {
-	ModelUser `json:"-"`
-	GuildID   string `json:"guild_id"`
+	ModelUser
+	GuildID string `json:"guild_id"`
 }
 
 type EventGuildBanRemove struct {
-	ModelUser `json:"-"`
-	GuildID   string `json:"guild_id"`
+	ModelUser
+	GuildID string `json:"guild_id"`
 }
 
 type EventGuildEmojisUpdate struct {
@@ -63,12 +76,13 @@ type EventGuildIntegrationsUpdate struct {
 }
 
 type EventGuildMemberAdd struct {
+	ModelGuildMember
 	GuildID string `json:"guild_id"`
 }
 
 type EventGuildMemberRemove struct {
-	User    *ModelUser `json:"user"`
-	GuildID string     `json:"guild_id"`
+	User    ModelUser `json:"user"`
+	GuildID string    `json:"guild_id"`
 }
 
 type EventGuildMemberUpdate struct {
@@ -79,8 +93,8 @@ type EventGuildMemberUpdate struct {
 }
 
 type EventGuildMembersChunk struct {
-	GuildID string
-	Members []*ModelGuildMember
+	GuildID string              `json:"guild_id"`
+	Members []*ModelGuildMember `json:"members"`
 }
 
 type EventGuildRoleCreate struct {
@@ -99,12 +113,12 @@ type EventGuildRoleDelete struct {
 }
 
 type EventMessageCreate struct {
-	ModelMessage `json:"-"`
+	ModelMessage
 }
 
 // May not be full message.
 type EventMessageUpdate struct {
-	ModelMessage `json:"-"`
+	ModelMessage
 }
 
 type EventMessageDelete struct {
@@ -137,12 +151,20 @@ type EventMessageReactionRemoveAll struct {
 }
 
 type EventPresenceUpdate struct {
+	// TODO why is there even a user here?
 	User    ModelUser  `json:"user"`
 	Roles   []string   `json:"roles"`
 	Game    *ModelGame `json:"game"`
 	GuildID string     `json:"guild_id"`
 	Status  string     `json:"status"`
 }
+
+const (
+	StatusIdle    = "idle"
+	StatusDND     = "dnd"
+	StatusOnline  = "online"
+	StatusOffline = "offline"
+)
 
 type ModelGame struct {
 	Name string  `json:"name"`
@@ -152,13 +174,8 @@ type ModelGame struct {
 
 const (
 	// Yes this is actually what Discord calls it.
-	GameTypeGame = iota
-	GameTypeStreaming
-
-	StatusIdle    = "idle"
-	StatusDND     = "dnd"
-	StatusOnline  = "online"
-	StatusOffline = "offline"
+	ModelGameTypeGame = iota
+	ModelGameTypeStreaming
 )
 
 type EventTypingStart struct {
@@ -168,11 +185,11 @@ type EventTypingStart struct {
 }
 
 type EventUserUpdate struct {
-	ModelUser `json:"-"`
+	ModelUser
 }
 
 type EventVoiceStateUpdate struct {
-	ModelVoiceState `json:"-"`
+	ModelVoiceState
 }
 
 type eventVoiceServerUpdate struct {
@@ -181,100 +198,85 @@ type eventVoiceServerUpdate struct {
 	Endpoint string `json:"endpoint"`
 }
 
-type eventMux map[string]interface{}
-
-func newEventMux() eventMux {
-	return make(eventMux)
+type EventHandlerError struct {
+	Err       error
+	Event     interface{}
+	EventName string
 }
 
-func (em eventMux) Register(fn interface{}) {
-	switch fn.(type) {
-	case func(ctx context.Context, conn *Conn, e *eventReady):
-		em["READY"] = fn
-	case func(ctx context.Context, conn *Conn, e *eventResumed):
-		em["RESUMED"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventChannelCreate):
-		em["CHANNEL_CREATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventChannelUpdate):
-		em["CHANNEL_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventChannelDelete):
-		em["CHANNEL_DELETE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildCreate):
-		em["GUILD_CREATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildUpdate):
-		em["GUILD_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildDelete):
-		em["GUILD_DELETE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildBanAdd):
-		em["GUILD_BAN_ADD"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildBanRemove):
-		em["GUILD_BAN_REMOVE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildEmojisUpdate):
-		em["GUILD_EMOJIS_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildIntegrationsUpdate):
-		em["GUILD_INTEGRATIONS_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildMemberAdd):
-		em["GUILD_MEMBER_ADD"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildMemberRemove):
-		em["GUILD_MEMBER_REMOVE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildMemberUpdate):
-		em["GUILD_MEMBER_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildMembersChunk):
-		em["GUILD_MEMBERS_CHUNK"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildRoleCreate):
-		em["GUILD_ROLE_CREATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildRoleUpdate):
-		em["GUILD_ROLE_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventGuildRoleDelete):
-		em["GUILD_ROLE_DELETE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageCreate):
-		em["MESSAGE_CREATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageUpdate):
-		em["MESSAGE_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageDelete):
-		em["MESSAGE_DELETE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageDeleteBulk):
-		em["MESSAGE_DELETE_BULK"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageReactionAdd):
-		em["MESSAGE_REACTION_ADD"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageReactionRemove):
-		em["MESSAGE_REACTION_REMOVE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventMessageReactionRemoveAll):
-		em["MESSAGE_REACTION_REMOVE_ALL"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventPresenceUpdate):
-		em["PRESENCE_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventTypingStart):
-		em["TYPING_START"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventUserUpdate):
-		em["USER_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *EventVoiceStateUpdate):
-		em["VOICE_STATE_UPDATE"] = fn
-	case func(ctx context.Context, conn *Conn, e *eventVoiceServerUpdate):
-		em["VOICE_SERVER_UPDATE"] = fn
-	default:
-		panic("unknown event handler signature")
-	}
-}
-
-func (em eventMux) route(ctx context.Context, conn *Conn, p *receivedPayload, sync bool) error {
-	h, ok := em[p.Type]
-	if !ok {
-		// Discord better not be sending unknown events.
-		return nil
-	}
-	e := reflect.New(reflect.TypeOf(h).In(2).Elem())
-	err := json.Unmarshal(p.Data, e.Interface())
+func (e *EventHandlerError) Error() string {
+	eventJSON, err := json.MarshalIndent(e.Event, "", "    ")
 	if err != nil {
-		return err
+		panic(err)
 	}
-	args := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(conn), e}
-	fn := func() {
-		reflect.ValueOf(h).Call(args)
+	return fmt.Sprintf("%v handler error: %v\nevent: %v", e.EventName, e.Err, eventJSON)
+}
+
+func getEventStruct(eventType string) interface{} {
+	switch eventType {
+	case "READY":
+		return new(eventReady)
+	case "RESUMED":
+		return new(eventResumed)
+	case "CHANNEL_CREATE":
+		return new(EventChannelCreate)
+	case "CHANNEL_UPDATE":
+		return new(*EventChannelUpdate)
+	case "CHANNEL_DELETE":
+		return new(*EventChannelDelete)
+	case "GUILD_CREATE":
+		return new(*EventGuildCreate)
+	case "GUILD_UPDATE":
+		return new(*EventGuildUpdate)
+	case "GUILD_DELETE":
+		return new(*EventGuildDelete)
+	case "GUILD_BAN_ADD":
+		return new(*EventGuildBanAdd)
+	case "GUILD_BAN_REMOVE":
+		return new(*EventGuildBanRemove)
+	case "GUILD_EMOJIS_UPDATE":
+		return new(*EventGuildEmojisUpdate)
+	case "GUILD_INTEGRATIONS_UPDATE":
+		return new(*EventGuildIntegrationsUpdate)
+	case "GUILD_MEMBER_ADD":
+		return new(*EventGuildMemberAdd)
+	case "GUILD_MEMBER_REMOVE":
+		return new(*EventGuildMemberRemove)
+	case "GUILD_MEMBER_UPDATE":
+		return new(*EventGuildMemberUpdate)
+	case "GUILD_MEMBERS_CHUNK":
+		return new(*EventGuildMembersChunk)
+	case "GUILD_ROLE_CREATE":
+		return new(*EventGuildRoleCreate)
+	case "GUILD_ROLE_UPDATE":
+		return new(*EventGuildRoleUpdate)
+	case "GUILD_ROLE_DELETE":
+		return new(*EventGuildRoleDelete)
+	case "MESSAGE_CREATE":
+		return new(*EventMessageCreate)
+	case "MESSAGE_UPDATE":
+		return new(*EventMessageUpdate)
+	case "MESSAGE_DELETE":
+		return new(*EventMessageDelete)
+	case "MESSAGE_DELETE_BULK":
+		return new(*EventMessageDeleteBulk)
+	case "MESSAGE_REACTION_ADD":
+		return new(*EventMessageReactionAdd)
+	case "MESSAGE_REACTION_REMOVE":
+		return new(*EventMessageReactionRemove)
+	case "MESSAGE_REACTION_REMOVE_ALL":
+		return new(*EventMessageReactionRemoveAll)
+	case "PRESENCE_UPDATE":
+		return new(*EventPresenceUpdate)
+	case "TYPING_START":
+		return new(*EventTypingStart)
+	case "USER_UPDATE":
+		return new(*EventUserUpdate)
+	case "VOICE_STATE_UPDATE":
+		return new(*EventVoiceStateUpdate)
+	case "VOICE_SERVER_UPDATE":
+		return new(*eventVoiceServerUpdate)
+	default:
+		panic("unknown event")
 	}
-	if sync {
-		fn()
-	} else {
-		go fn()
-	}
-	return nil
 }
