@@ -10,7 +10,6 @@ import (
 // State stored from websocket events.
 type State struct {
 	sessionID string
-	eventMux  EventMux
 
 	// TODO seperate mutex for guilds map, channels map etc?
 	// TODO event handlers send new transformed data further? E.g. not the raw events but StateGuild etc?
@@ -22,30 +21,24 @@ type State struct {
 	// So if someone wanted to find the Channel in which a message was sent, they would have to search
 	// all guilds.
 	channels map[string]*StateChannel
-	// TOOD users      map[string]*StateUser
+	users    map[string]*ModelUser
 }
 
 func newState() *State {
 	s := &State{
-		eventMux:   newEventMux(),
 		dmChannels: make(map[string]*StateChannel),
 		guilds:     make(map[string]*StateGuild),
 		channels:   make(map[string]*StateChannel),
 	}
-
-	s.eventMux.Register(s.ready)
-	s.eventMux.Register(s.createChannel)
-
 	return s
 }
 
-// The maps are reason I went for a modelMu instead of using the map as a sync point. E.g. instead of
-// updating the values up above in the struct itself, I create a new struct and copy the values in
-// and then update the map with that new struct.
-// Issue with this is that if I would have to lock/unlock all the map mutexes before copying the
-// struct to make any little change. Sounds dumb to me. Reason I always have to lock is incase
-// the map reference is written to, e.g. when I want to dump one of the maps when I get a guild create
-// after a guild has gone unavailable.
+func (s *State) handle(e interface{}, handler EventHandler) {
+	switch e.(type) {
+	// TODO
+	}
+}
+
 type StateGuild struct {
 	modelMu                         sync.RWMutex
 	id                              string
@@ -65,46 +58,31 @@ type StateGuild struct {
 	joinedAt                        time.Time
 
 	rolesMu sync.RWMutex
-	roles  map[string]*ModelRole
+	roles   map[string]*ModelRole
 
 	emojisMu sync.RWMutex
-	emojis map[string]*ModelGuildEmoji
+	emojis   []*ModelGuildEmoji
 
 	large       bool
-
-	unavailableMu sync.RWMutex
 	unavailable bool
 
-	memberCountMu sync.RWMutex
+	voiceStatesMu sync.RWMutex
+	voiceStates   map[string]*ModelVoiceState
+
+	membersMu   sync.RWMutex
+	members     map[string]*StateGuildMember
 	memberCount int
 
-	voiceStatesMu sync.RWMutex
-	voiceStates map[string]*ModelVoiceState
-
-	membersMu sync.RWMutex
-	members     map[string]*ModelGuildMember
-
 	channelsMu sync.RWMutex
-	channels    map[string]*StateChannel
+	channels   map[string]*StateChannel
 
 	presencesMu sync.RWMutex
 	// TODO how should I handle improperly typed updates?
 	presences map[string]*StatePresence
 }
 
-type StateGuildMember struct {
-	StateUser
-}
-
-type StatePresence struct {
-	User   *StateUser `json:"user"`
-	Game   *ModelGame `json:"game"`
-	Status string     `json:"status"`
-}
-
 func (sg *StateGuild) ID() string {
-	// It's immutable for sure but I'm doing this anyway because I'm gonna replace
-	// the entire ModelGuild pointer with another on a GuildUpdate event.
+	// It's immutable for sure but I'm doing this anyway for consistency.
 	sg.modelMu.RLock()
 	defer sg.modelMu.RUnlock()
 	return sg.id
@@ -176,6 +154,13 @@ func (sg *StateGuild) DefaultMessageNotificationLevel() int {
 	return sg.defaultMessageNotificationLevel
 }
 
+func (sg *StateGuild) Role(rID string) (*ModelRole, bool) {
+	sg.rolesMu.RLock()
+	defer sg.rolesMu.RUnlock()
+	r, ok := sg.roles[rID]
+	return r, ok
+}
+
 func (sg *StateGuild) Roles() []*ModelRole {
 	sg.rolesMu.RLock()
 	defer sg.rolesMu.RUnlock()
@@ -189,10 +174,8 @@ func (sg *StateGuild) Roles() []*ModelRole {
 func (sg *StateGuild) Emojis() []*ModelGuildEmoji {
 	sg.emojisMu.RLock()
 	defer sg.emojisMu.RUnlock()
-	emojis := make([]*ModelGuildEmoji, 0, len(sg.emojis))
-	for _, e := range sg.emojis {
-		emojis = append(emojis, e)
-	}
+	emojis := make([]*ModelGuildEmoji, len(sg.emojis))
+	copy(emojis, sg.emojis)
 	return emojis
 }
 
@@ -218,19 +201,6 @@ func (sg *StateGuild) Large() bool {
 	return sg.large
 }
 
-// No need for this to be exported, just a helper function. Couldn't think of a better name
-func (sg *StateGuild) Unavailable() bool {
-	sg.modelMu.RLock()
-	defer sg.modelMu.RUnlock()
-	return sg.unavailable
-}
-
-func (sg *StateGuild) MemberCount() int {
-	sg.modelMu.RLock()
-	defer sg.modelMu.RUnlock()
-	return sg.memberCount
-}
-
 func (sg *StateGuild) VoiceStates() []*ModelVoiceState {
 	sg.modelMu.RLock()
 	defer sg.modelMu.RUnlock()
@@ -241,10 +211,23 @@ func (sg *StateGuild) VoiceStates() []*ModelVoiceState {
 	return voiceStates
 }
 
-func (sg *StateGuild) Members() []*ModelGuildMember {
-	sg.modelMu.RLock()
-	defer sg.modelMu.RUnlock()
-	members := make([]*ModelGuildMember, 0, len(sg.members))
+func (sg *StateGuild) MemberCount() int {
+	sg.membersMu.RLock()
+	defer sg.membersMu.RUnlock()
+	return sg.memberCount
+}
+
+func (sg *StateGuild) Member(uID string) (*StateGuildMember, bool) {
+	sg.membersMu.RLock()
+	defer sg.membersMu.RUnlock()
+	sgm, ok := sg.members[uID]
+	return sgm, ok
+}
+
+func (sg *StateGuild) Members() []*StateGuildMember {
+	sg.membersMu.RLock()
+	defer sg.membersMu.RUnlock()
+	members := make([]*StateGuildMember, 0, len(sg.members))
 	for _, gm := range sg.members {
 		members = append(members, gm)
 	}
@@ -271,114 +254,10 @@ func (sg *StateGuild) Presences() []*StatePresence {
 	return presences
 }
 
-type StateChannel struct {
-	mu       sync.RWMutex
-	c        *ModelChannel
-	guild    *StateGuild
-	messages []*ModelMessage
-}
-
-func (sc *StateChannel) ID() string {
-	// It's immutable for sure but I'm doing this anyway because I'm gonna replace
-	// the entire ModelChannel pointer with another on a ChannelUpdate event.
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.ID
-}
-
-func (sc *StateChannel) Type() int {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.Type
-}
-
-func (sc *StateChannel) Guild() *StateGuild {
-	// Guaranteed to never change.
-	return sc.guild
-}
-
-func (sc *StateChannel) Position() int {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.Position
-}
-
-func (sc *StateChannel) PermissionOverwrites() []*ModelPermissionOverwrite {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	permissionOverwrites := make([]*ModelPermissionOverwrite, len(sc.c.PermissionOverwrites))
-	copy(permissionOverwrites, sc.c.PermissionOverwrites)
-	return permissionOverwrites
-}
-
-func (sc *StateChannel) Name() string {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.Name
-}
-
-func (sc *StateChannel) Topic() string {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.Topic
-}
-
-func (sc *StateChannel) LastMessageID() string {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.LastMessageID
-}
-
-func (sc *StateChannel) Bitrate() int {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.Bitrate
-}
-
-func (sc *StateChannel) UserLimit() int {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.UserLimit
-}
-
-func (sc *StateChannel) Recipients() []*ModelUser {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	recipients := make([]*ModelUser, len(sc.c.Recipients))
-	copy(recipients, sc.c.Recipients)
-	return recipients
-}
-
-func (sc *StateChannel) Icon() string {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.Icon
-}
-
-func (sc *StateChannel) OwnerID() string {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.OwnerID
-}
-
-func (sc *StateChannel) ApplicationID() string {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.c.ApplicationID
-}
-
-// Messages returns a copy of the current messages. The last message is the most recent.
-func (sc *StateChannel) Messages() []*ModelMessage {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	messages := make([]*ModelMessage, len(sc.messages))
-	copy(messages, sc.messages)
-	return messages
-}
-
 type StateUser struct {
-	mu sync.RWMutex
-	u  *ModelUser
+	mu   sync.RWMutex
+	u    *ModelUser
+	refs int
 }
 
 func (su *StateUser) ID() string {
@@ -427,6 +306,140 @@ func (su *StateUser) Email() string {
 	su.mu.RLock()
 	defer su.mu.RUnlock()
 	return su.u.Email
+}
+
+type StateGuildMember struct {
+	User     *StateUser
+	Nick     *string
+	Roles    []string
+	JoinedAt time.Time
+	Deaf     bool
+	Mute     bool
+}
+
+type StatePresence struct {
+	UserID string
+	Game   *ModelGame
+	Status string
+}
+
+type StateChannel struct {
+	guild *StateGuild
+
+	mu                   sync.RWMutex
+	id                   string
+	chanType             int
+	position             int
+	permissionOverwrites []*ModelPermissionOverwrite
+	name                 string
+	topic                string
+	lastMessageID        string
+	bitrate              int
+	userLimit            int
+	recipients           []*StateUser
+	icon                 string
+	ownerID              string
+	applicationID        string
+
+	messages []*ModelMessage
+}
+
+func (sc *StateChannel) ID() string {
+	// It's immutable for sure but I'm doing this anyway because I'm gonna replace
+	// the entire ModelChannel pointer with another on a ChannelUpdate event.
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.id
+}
+
+func (sc *StateChannel) Type() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.chanType
+}
+
+func (sc *StateChannel) Guild() *StateGuild {
+	// Guaranteed to never change.
+	return sc.guild
+}
+
+func (sc *StateChannel) Position() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.position
+}
+
+func (sc *StateChannel) PermissionOverwrites() []*ModelPermissionOverwrite {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	permissionOverwrites := make([]*ModelPermissionOverwrite, len(sc.permissionOverwrites))
+	copy(permissionOverwrites, sc.permissionOverwrites)
+	return permissionOverwrites
+}
+
+func (sc *StateChannel) Name() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.name
+}
+
+func (sc *StateChannel) Topic() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.topic
+}
+
+func (sc *StateChannel) LastMessageID() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.lastMessageID
+}
+
+func (sc *StateChannel) Bitrate() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.bitrate
+}
+
+func (sc *StateChannel) UserLimit() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.userLimit
+}
+
+func (sc *StateChannel) Recipients() []*StateUser {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	recipients := make([]*StateUser, len(sc.recipients))
+	copy(recipients, sc.recipients)
+	return recipients
+}
+
+func (sc *StateChannel) Icon() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.icon
+}
+
+func (sc *StateChannel) OwnerID() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.ownerID
+}
+
+func (sc *StateChannel) ApplicationID() string {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.applicationID
+}
+
+// Messages returns a copy of the current messages. The last message is the most recent.
+func (sc *StateChannel) Messages() []*ModelMessage {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	messages := make([]*ModelMessage, len(sc.messages))
+	copy(messages, sc.messages)
+	return messages
 }
 
 func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {

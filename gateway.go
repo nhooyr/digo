@@ -35,11 +35,15 @@ func (g endpointGateway) get() (url string, err error) {
 	return urlStruct.URL, g.doMethod("GET", nil, &urlStruct)
 }
 
+type EventHandler interface {
+	Handle(ctx context.Context, conn *Conn, e interface{})
+}
+
 type Conn struct {
 	Client *Client
 	State  *State
 
-	eventMux     EventMux
+	eventHandler EventHandler
 	errorHandler func(err error)
 	logf         func(format string, v ...interface{})
 
@@ -66,9 +70,8 @@ type Conn struct {
 }
 
 type DialConfig struct {
-	Client *Client
-	// TODO Not being able to set this dynamically might be a problem for https://github.com/hammerandchisel/discord-api-docs/blob/master/docs/topics/Gateway.md#guild-members-chunk
-	EventMux EventMux
+	Client       *Client
+	EventHandler EventHandler
 	// May be called concurrently.
 	ErrorHandler func(err error)
 	// May be called concurrently.
@@ -80,7 +83,6 @@ type DialConfig struct {
 
 func NewDialConfig() *DialConfig {
 	return &DialConfig{
-		EventMux: newEventMux(),
 		ErrorHandler: func(err error) {
 			log.Print(err)
 		},
@@ -95,7 +97,7 @@ func Dial(config *DialConfig) (*Conn, error) {
 		State: newState(),
 
 		Client:       config.Client,
-		eventMux:     config.EventMux,
+		eventHandler: config.EventHandler,
 		errorHandler: config.ErrorHandler,
 		logf:         config.Logf,
 
