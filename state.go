@@ -792,42 +792,88 @@ func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventMessageUp
 	return errors.New("unknown message")
 }
 
-func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventMessageDelete) error {
+	sc, ok := s.Channel(e.ChannelID)
+	if !ok {
+		return errUnknownChannel
+	}
+	sc.messagesMu.Lock()
+	defer sc.messagesMu.Unlock()
+	for i, m := range sc.messages {
+		if m.ID == e.ID {
+			sc.messages = append(sc.messages[:i], sc.messages[i+1:]...)
+			return nil
+		}
+	}
+	return errors.New("unknown message")
 }
 
-func (s *State) bulkDeleteMessages(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) bulkDeleteMessages(ctx context.Context, conn *Conn, e *EventMessageDeleteBulk) error {
+	sc, ok := s.Channel(e.ChannelID)
+	if !ok {
+		return errUnknownChannel
+	}
+	sc.messagesMu.Lock()
+	messages := make([]*ModelMessage, 0, len(sc.messages))
+messageLoop:
+	for _, m := range sc.messages {
+		for _, mID := range e.IDs {
+			if mID == m.ID {
+				continue messageLoop
+			}
+		}
+		messages = append(messages, m)
+	}
+	sc.messages = messages
+	sc.messagesMu.Unlock()
+	return nil
 }
 
-func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventMessageReactionAdd) error {
+	sc, ok := s.Channel(e.ChannelID)
+	if !ok {
+		return errUnknownChannel
+	}
+	sc.messagesMu.Lock()
+	defer sc.messagesMu.Unlock()
+	for _, m := range sc.messages {
+		if m.ID == e.MessageID {
+			// TODO, make StateMessage
+			return nil
+		}
+	}
+	return errors.New("unknown message")
 }
 
 func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// TODO see above
 }
 
-func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventPresenceUpdate) error {
+	sg, ok := s.Guild(e.GuildID)
+	if !ok {
+		return errUnknownGuild
+	}
+	sg.presencesMu.Lock()
+	// TODO
+	sg.presencesMu.Unlock()
+	return nil
 }
 
-func (s *State) updateUser(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) updateUser(ctx context.Context, conn *Conn, e *EventUserUpdate) error {
+	s.userMu.Lock()
+	s.user = &e.ModelUser
+	s.userMu.Unlock()
+	return nil
 }
 
-func (s *State) updateVoiceState(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-}
-
-func (s *State) updateVoiceServer(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) updateVoiceState(ctx context.Context, conn *Conn, e *EventVoiceStateUpdate) error {
+	sg, ok := s.Guild(e.GuildID)
+	if !ok {
+		return errUnknownGuild
+	}
+	sg.voiceStatesMu.Lock()
+	sg.voiceStates[e.UserID] = &e.ModelVoiceState
+	sg.voiceStatesMu.Unlock()
+	return nil
 }
