@@ -729,29 +729,67 @@ func (s *State) chunkGuildMembers(ctx context.Context, conn *Conn, e *EventGuild
 	panic("TODO")
 }
 
-func (s *State) createGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// TODO use this in more places
+var errUnknownGuild = errors.New("unknown guild")
+
+func (s *State) createGuildRole(ctx context.Context, conn *Conn, e *EventGuildRoleCreate) error {
+	return s.insertGuildRole(e.GuildID, &e.Role)
 }
 
-func (s *State) updateGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) updateGuildRole(ctx context.Context, conn *Conn, e *EventGuildRoleUpdate) error {
+	return s.insertGuildRole(e.GuildID, &e.Role)
 }
 
-func (s *State) deleteGuildRole(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) insertGuildRole(gID string, r *ModelRole) error {
+	sg, ok := s.Guild(gID)
+	if !ok {
+		return errUnknownGuild
+	}
+	sg.rolesMu.Lock()
+	sg.roles[r.ID] = r
+	sg.rolesMu.Unlock()
+	return nil
 }
 
-func (s *State) createMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) deleteGuildRole(ctx context.Context, conn *Conn, e *EventGuildRoleDelete) error {
+	sg, ok := s.Guild(e.GuildID)
+	if !ok {
+		return errUnknownGuild
+	}
+	sg.rolesMu.Lock()
+	delete(sg.roles, e.Role.ID)
+	sg.rolesMu.Unlock()
+	return nil
 }
 
-func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// TODO use everywhere
+var errUnknownChannel = errors.New("unknown channel")
+
+func (s *State) createMessage(ctx context.Context, conn *Conn, e *EventMessageCreate) error {
+	sc, ok := s.Channel(e.ChannelID)
+	if !ok {
+		return errUnknownChannel
+	}
+	sc.messagesMu.Lock()
+	sc.messages = append(sc.messages, &e.ModelMessage)
+	sc.messagesMu.Unlock()
+	return nil
+}
+
+func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventMessageUpdate) error {
+	sc, ok := s.Channel(e.ChannelID)
+	if !ok {
+		return errUnknownChannel
+	}
+	sc.messagesMu.Lock()
+	defer sc.messagesMu.Unlock()
+	for i, m := range sc.messages {
+		if m.ID == e.ID {
+			sc.messages[i] = &e.ModelMessage
+			return nil
+		}
+	}
+	return errors.New("unknown message")
 }
 
 func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventChannelDelete) {
