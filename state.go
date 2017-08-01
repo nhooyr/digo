@@ -579,6 +579,11 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 
 	sg.large = e.Large
 
+	sg.roles = make(map[string]*ModelRole)
+	for _, r := range e.Roles {
+		sg.roles[r.ID] = r
+	}
+
 	sg.voiceStates = make(map[string]*ModelVoiceState)
 	for _, vs := range e.VoiceStates {
 		sg.voiceStates[vs.UserID] = vs
