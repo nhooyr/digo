@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -211,6 +212,7 @@ func (sg *StateGuild) VoiceStates() []*ModelVoiceState {
 	return voiceStates
 }
 
+// Only cause discord API sends it.
 func (sg *StateGuild) MemberCount() int {
 	sg.membersMu.RLock()
 	defer sg.membersMu.RUnlock()
@@ -234,9 +236,16 @@ func (sg *StateGuild) Members() []*StateGuildMember {
 	return members
 }
 
+func (sg *StateGuild) Channel(cID string) (*StateChannel, bool) {
+	sg.channelsMu.RLock()
+	defer sg.channelsMu.RUnlock()
+	sc, ok := sg.channels[cID]
+	return sc, ok
+}
+
 func (sg *StateGuild) Channels() []*StateChannel {
-	sg.modelMu.RLock()
-	defer sg.modelMu.RUnlock()
+	sg.channelsMu.RLock()
+	defer sg.channelsMu.RUnlock()
 	channels := make([]*StateChannel, 0, len(sg.channels))
 	for _, sc := range sg.channels {
 		channels = append(channels, sc)
@@ -244,9 +253,16 @@ func (sg *StateGuild) Channels() []*StateChannel {
 	return channels
 }
 
+func (sg *StateGuild) Presence(uID string) (*StatePresence, bool) {
+	sg.presencesMu.RLock()
+	defer sg.presencesMu.RUnlock()
+	sp, ok := sg.presences[uID]
+	return sp, ok
+}
+
 func (sg *StateGuild) Presences() []*StatePresence {
-	sg.modelMu.RLock()
-	defer sg.modelMu.RUnlock()
+	sg.presencesMu.RLock()
+	defer sg.presencesMu.RUnlock()
 	presences := make([]*StatePresence, 0, len(sg.presences))
 	for _, p := range sg.presences {
 		presences = append(presences, p)
@@ -255,9 +271,10 @@ func (sg *StateGuild) Presences() []*StatePresence {
 }
 
 type StateUser struct {
-	mu   sync.RWMutex
-	u    *ModelUser
-	refs int
+	refs int64
+
+	mu sync.RWMutex
+	u  *ModelUser
 }
 
 func (su *StateUser) ID() string {
@@ -308,6 +325,18 @@ func (su *StateUser) Email() string {
 	return su.u.Email
 }
 
+func (su *StateUser) getRefs() int64 {
+	return atomic.LoadInt64(&su.refs)
+}
+
+func (su *StateUser) incrementRefs() {
+	atomic.AddInt64(&su.refs, 1)
+}
+
+func (su *StateUser) decrementRefs() int64 {
+	return atomic.AddInt64(&su.refs, -1)
+}
+
 type StateGuildMember struct {
 	User     *StateUser
 	Nick     *string
@@ -345,8 +374,7 @@ type StateChannel struct {
 }
 
 func (sc *StateChannel) ID() string {
-	// It's immutable for sure but I'm doing this anyway because I'm gonna replace
-	// the entire ModelChannel pointer with another on a ChannelUpdate event.
+	// Immutable but doing this for consistency.
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
 	return sc.id
