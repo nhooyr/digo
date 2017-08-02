@@ -454,10 +454,60 @@ func (s *State) Channel(cID string) (*StateChannel, bool) {
 	return sc, ok
 }
 
-func (s *State) handle(e interface{}, handler EventHandler) {
-	switch e.(type) {
-	// TODO
+func (s *State) handle(ctx context.Context, conn *Conn, e interface{}) (err error) {
+	switch e := e.(type) {
+	case *eventReady:
+		err = s.ready(ctx, conn, e)
+	case *EventChannelCreate:
+		err = s.createChannel(ctx, conn, e)
+	case *EventChannelUpdate:
+		err = s.updateChannel(ctx, conn, e)
+	case *EventChannelDelete:
+		err = s.deleteChannel(ctx, conn, e)
+	case *EventGuildCreate:
+		err = s.createGuild(ctx, conn, e)
+	case *EventGuildUpdate:
+		err = s.updateGuild(ctx, conn, e)
+	case *EventGuildDelete:
+		err = s.deleteGuild(ctx, conn, e)
+	case *EventGuildEmojisUpdate:
+		err = s.updateGuildEmojis(ctx, conn, e)
+	case *EventGuildMemberAdd:
+		err = s.addGuildMember(ctx, conn, e)
+	case *EventGuildMemberRemove:
+		err = s.removeGuildMember(ctx, conn, e)
+	case *EventGuildMemberUpdate:
+		err = s.updateGuildMember(ctx, conn, e)
+	case *EventGuildMembersChunk:
+		err = s.chunkGuildMembers(ctx, conn, e)
+	case *EventGuildRoleCreate:
+		err = s.createGuildRole(ctx, conn, e)
+	case *EventGuildRoleUpdate:
+		err = s.updateGuildRole(ctx, conn, e)
+	case *EventGuildRoleDelete:
+		err = s.deleteGuildRole(ctx, conn, e)
+	case *EventMessageCreate:
+		err = s.createMessage(ctx, conn, e)
+	case *EventMessageUpdate:
+		err = s.updateMessage(ctx, conn, e)
+	case *EventMessageDelete:
+		err = s.deleteMessage(ctx, conn, e)
+	case *EventMessageDeleteBulk:
+		err = s.bulkDeleteMessages(ctx, conn, e)
+	case *EventMessageReactionAdd:
+		err = s.addMessageReaction(ctx, conn, e)
+	case *EventMessageReactionRemove:
+		err = s.removeMessageReaction(ctx, conn, e)
+	case *EventMessageReactionRemoveAll:
+		err = s.removeAllMessageReactions(ctx, conn, e)
+	case *EventPresenceUpdate:
+		err = s.updatePresence(ctx, conn, e)
+	case *EventUserUpdate:
+		err = s.updateUser(ctx, conn, e)
+	case *EventVoiceStateUpdate:
+		err = s.updateVoiceState(ctx, conn, e)
 	}
+	return err
 }
 
 func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {
@@ -845,8 +895,13 @@ func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventMess
 	return errors.New("unknown message")
 }
 
-func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventChannelDelete) {
-	// TODO see above
+func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventMessageReactionRemove) error {
+	panic("TODO")
+}
+
+// TODO slightly misleading name
+func (s *State) removeAllMessageReactions(ctx context.Context, conn *Conn, e *EventMessageReactionRemoveAll) error {
+	panic("TODO")
 }
 
 func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventPresenceUpdate) error {

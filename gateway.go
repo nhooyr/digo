@@ -178,7 +178,7 @@ func (c *Conn) manager() {
 }
 
 const (
-	operationDispatch = iota
+	operationDispatch            = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -455,46 +455,49 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 	case operationReconnect:
 		return errors.New("reconnect operation")
 	case operationDispatch:
-		c.ready = true
-		c.resuming = false
-
-		c.heartbeatMu.Lock()
-		c.sequenceNumber = p.SequenceNumber
-		c.heartbeatMu.Unlock()
-
-		fn, err := c.State.eventMux.getHandler(ctx, c, p)
-		if err != nil {
-			return err
-		}
-
-		if fn != nil {
-			ehErr := fn()
-			if ehErr != nil {
-				if ehErr.Err == errHandled {
-					return nil
-				}
-				// State has been corrupted somehow. E.g. a message created for a non existing guild.
-				// Or a reaction for a non existing message. Something went wrong. We should reconnect.
-				return err
-			}
-		}
-
-		fn, err = c.eventMux.getHandler(ctx, c, p)
-		if err != nil {
-			// The State eventMux should have errored. This should be impossible.
-			panic(err)
-		}
-
-		if fn != nil {
-			c.runWorker(func() {
-				err = fn()
-				if err != nil {
-					c.errorHandler(err)
-				}
-			})
-		}
+		return c.onDispatch(ctx, p)
 	default:
 		panic("discord gone crazy; unexpected operation type")
+	}
+	return nil
+}
+
+func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
+	c.ready = true
+	c.resuming = false
+
+	c.heartbeatMu.Lock()
+	c.sequenceNumber = p.SequenceNumber
+	c.heartbeatMu.Unlock()
+
+	e, err := getEventStruct(p.Type)
+	if err != nil {
+		return &EventHandlerError{
+			EventName: p.Type,
+			Err:       err,
+		}
+	}
+
+	err = json.Unmarshal(p.Data, &e)
+	if err != nil {
+		return &EventHandlerError{
+			EventName: p.Type,
+			Err:       err,
+		}
+	}
+
+	err = c.State.handle(ctx, c, e)
+	if err != nil {
+		if err == errHandled {
+			return nil
+		}
+		// State has been corrupted somehow. E.g. a message created for a non existing guild.
+		// Or a reaction for a non existing message. Something went wrong. We should reconnect.
+		return &EventHandlerError{
+			EventName: p.Type,
+			Event:     e,
+			Err:       err,
+		}
 	}
 	return nil
 }

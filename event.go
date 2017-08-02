@@ -2,6 +2,7 @@ package discgo
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -212,71 +213,72 @@ func (e *EventHandlerError) Error() string {
 	return fmt.Sprintf("%v handler error: %v\nevent: %v", e.EventName, e.Err, eventJSON)
 }
 
-func getEventStruct(eventType string) interface{} {
+var errUnknownEvent = errors.New("unknown event")
+
+func getEventStruct(eventType string) (interface{}, error) {
 	switch eventType {
 	case "READY":
-		return new(eventReady)
+		return new(eventReady), nil
 	case "RESUMED":
-		return new(eventResumed)
+		return new(eventResumed), nil
 	case "CHANNEL_CREATE":
-		return new(EventChannelCreate)
+		return new(EventChannelCreate), nil
 	case "CHANNEL_UPDATE":
-		return new(*EventChannelUpdate)
+		return new(*EventChannelUpdate), nil
 	case "CHANNEL_DELETE":
-		return new(*EventChannelDelete)
+		return new(*EventChannelDelete), nil
 	case "GUILD_CREATE":
-		return new(*EventGuildCreate)
+		return new(*EventGuildCreate), nil
 	case "GUILD_UPDATE":
-		return new(*EventGuildUpdate)
+		return new(*EventGuildUpdate), nil
 	case "GUILD_DELETE":
-		return new(*EventGuildDelete)
+		return new(*EventGuildDelete), nil
 	case "GUILD_BAN_ADD":
-		return new(*EventGuildBanAdd)
+		return new(*EventGuildBanAdd), nil
 	case "GUILD_BAN_REMOVE":
-		return new(*EventGuildBanRemove)
+		return new(*EventGuildBanRemove), nil
 	case "GUILD_EMOJIS_UPDATE":
-		return new(*EventGuildEmojisUpdate)
+		return new(*EventGuildEmojisUpdate), nil
 	case "GUILD_INTEGRATIONS_UPDATE":
-		return new(*EventGuildIntegrationsUpdate)
+		return new(*EventGuildIntegrationsUpdate), nil
 	case "GUILD_MEMBER_ADD":
-		return new(*EventGuildMemberAdd)
+		return new(*EventGuildMemberAdd), nil
 	case "GUILD_MEMBER_REMOVE":
-		return new(*EventGuildMemberRemove)
+		return new(*EventGuildMemberRemove), nil
 	case "GUILD_MEMBER_UPDATE":
-		return new(*EventGuildMemberUpdate)
+		return new(*EventGuildMemberUpdate), nil
 	case "GUILD_MEMBERS_CHUNK":
-		return new(*EventGuildMembersChunk)
+		return new(*EventGuildMembersChunk), nil
 	case "GUILD_ROLE_CREATE":
-		return new(*EventGuildRoleCreate)
+		return new(*EventGuildRoleCreate), nil
 	case "GUILD_ROLE_UPDATE":
-		return new(*EventGuildRoleUpdate)
+		return new(*EventGuildRoleUpdate), nil
 	case "GUILD_ROLE_DELETE":
-		return new(*EventGuildRoleDelete)
+		return new(*EventGuildRoleDelete), nil
 	case "MESSAGE_CREATE":
-		return new(*EventMessageCreate)
+		return new(*EventMessageCreate), nil
 	case "MESSAGE_UPDATE":
-		return new(*EventMessageUpdate)
+		return new(*EventMessageUpdate), nil
 	case "MESSAGE_DELETE":
-		return new(*EventMessageDelete)
+		return new(*EventMessageDelete), nil
 	case "MESSAGE_DELETE_BULK":
-		return new(*EventMessageDeleteBulk)
+		return new(*EventMessageDeleteBulk), nil
 	case "MESSAGE_REACTION_ADD":
-		return new(*EventMessageReactionAdd)
+		return new(*EventMessageReactionAdd), nil
 	case "MESSAGE_REACTION_REMOVE":
-		return new(*EventMessageReactionRemove)
+		return new(*EventMessageReactionRemove), nil
 	case "MESSAGE_REACTION_REMOVE_ALL":
-		return new(*EventMessageReactionRemoveAll)
+		return new(*EventMessageReactionRemoveAll), nil
 	case "PRESENCE_UPDATE":
-		return new(*EventPresenceUpdate)
+		return new(*EventPresenceUpdate), nil
 	case "TYPING_START":
-		return new(*EventTypingStart)
+		return new(*EventTypingStart), nil
 	case "USER_UPDATE":
-		return new(*EventUserUpdate)
+		return new(*EventUserUpdate), nil
 	case "VOICE_STATE_UPDATE":
-		return new(*EventVoiceStateUpdate)
+		return new(*EventVoiceStateUpdate), nil
 	case "VOICE_SERVER_UPDATE":
-		return new(*eventVoiceServerUpdate)
-	default:
-		panic("unknown event")
+		return new(*eventVoiceServerUpdate), nil
 	}
+	return nil, errUnknownEvent
 }
