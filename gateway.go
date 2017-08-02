@@ -178,7 +178,7 @@ func (c *Conn) manager() {
 }
 
 const (
-	operationDispatch            = iota
+	operationDispatch = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -457,7 +457,7 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 	case operationDispatch:
 		return c.onDispatch(ctx, p)
 	default:
-		panic("discord gone crazy; unexpected operation type")
+		return errors.New("discord gone crazy; unexpected operation type")
 	}
 	return nil
 }

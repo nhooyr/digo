@@ -27,9 +27,9 @@ type ModelInviteGuild struct {
 }
 
 type ModelInviteChannel struct {
-	ID   string      `json:"id"`
-	Name string      `json:"name"`
-	Type channelType `json:"type"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type int    `json:"type"`
 }
 
 type EndpointInvite struct {

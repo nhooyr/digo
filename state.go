@@ -49,6 +49,7 @@ type StateGuild struct {
 	presences map[string]*ModelPresence
 }
 
+// TODO any of these style methods do not always need to lock, e.g. when a guild is created
 func (sg *StateGuild) updateFromModel(g *ModelGuild) {
 	sg.modelMu.Lock()
 	sg.rolesMu.Lock()
@@ -454,6 +455,15 @@ func (s *State) Channel(cID string) (*StateChannel, bool) {
 	return sc, ok
 }
 
+func (s *State) channel(cID string) (*StateChannel, bool) {
+	// Check Guild Channels first, DMChannels are used less often.
+	sc, ok := s.guildChannels[cID]
+	if !ok {
+		sc, ok = s.dmChannels[cID]
+	}
+	return sc, ok
+}
+
 func (s *State) handle(ctx context.Context, conn *Conn, e interface{}) (err error) {
 	switch e := e.(type) {
 	case *eventReady:
@@ -553,9 +563,7 @@ func (s *State) updateChannel(ctx context.Context, conn *Conn, e *EventChannelUp
 
 func (s *State) insertChannel(c *ModelChannel) error {
 	if c.Type == ModelChannelTypeDM || c.Type == ModelChannelTypeGroupDM {
-		s.dmChannelsMu.RLock()
 		sc, ok := s.dmChannels[c.ID]
-		s.dmChannelsMu.RUnlock()
 		if !ok {
 			sc = new(StateChannel)
 		}
@@ -568,16 +576,13 @@ func (s *State) insertChannel(c *ModelChannel) error {
 		return nil
 	}
 
-	s.guildChannelsMu.RLock()
 	sc, ok := s.guildChannels[c.ID]
-	s.guildChannelsMu.RUnlock()
-
 	if ok {
 		sc.updateFromModel(c)
 		return nil
 	}
 
-	sg, ok := s.Guild(c.GuildID)
+	sg, ok := s.guilds[c.GuildID]
 	if !ok {
 		return errors.New("a channel created/updated for an unknown guild")
 	}
@@ -587,12 +592,11 @@ func (s *State) insertChannel(c *ModelChannel) error {
 
 	s.guildChannelsMu.Lock()
 	sg.channelsMu.Lock()
-
 	s.guildChannels[sc.id] = sc
 	sg.channels[c.ID] = sc
-
 	s.guildChannelsMu.Unlock()
 	sg.channelsMu.Unlock()
+
 	return nil
 }
 
@@ -604,17 +608,15 @@ func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDe
 		return nil
 	}
 
-	sg, ok := s.Guild(e.GuildID)
+	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errors.New("a channel deleted for an unknown guild")
 	}
 
 	s.guildChannelsMu.Lock()
 	sg.channelsMu.Lock()
-
 	delete(s.guildChannels, e.ID)
 	delete(sg.channels, e.ID)
-
 	s.guildChannelsMu.Unlock()
 	sg.channelsMu.Unlock()
 
@@ -650,9 +652,10 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 		sg.presences[p.User.ID] = p
 	}
 
+	sgOld, ok := s.guilds[e.ID]
+
 	s.guildsMu.Lock()
 	s.guildChannelsMu.Lock()
-
 	for _, c := range e.Channels {
 		sc := new(StateChannel)
 		// TODO updateFromModel locks but this is a brand new StateChannel so no locking necessary. maybe change later.
@@ -661,10 +664,7 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 		sg.channels[c.ID] = sc
 		s.guildChannels[c.ID] = sc
 	}
-
-	sgOld, ok := s.guilds[e.ID]
 	s.guilds[e.ID] = sg
-
 	s.guildsMu.Unlock()
 	s.guildChannelsMu.Unlock()
 
@@ -682,7 +682,7 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 }
 
 func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventGuildUpdate) error {
-	sg, ok := s.Guild(e.ID)
+	sg, ok := s.guilds[e.ID]
 	if !ok {
 		return errors.New("non existing guild updated?")
 	}
@@ -691,12 +691,14 @@ func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventGuildUpdate
 }
 
 func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete) error {
-	s.guildsMu.Lock()
 	sg, ok := s.guilds[e.ID]
 	if !ok {
-		s.guildsMu.Unlock()
 		return errors.New("non existing guild deleted")
 	}
+
+	s.guildsMu.Lock()
+	s.guildChannelsMu.Lock()
+
 	if e.Unavailable {
 		s.guilds[e.ID] = &StateGuild{
 			unavailable: true,
@@ -704,12 +706,12 @@ func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete
 	} else {
 		delete(s.guilds, e.ID)
 	}
-	s.guildsMu.Unlock()
 
-	s.guildChannelsMu.Lock()
 	for id := range sg.channels {
 		delete(s.guildChannels, id)
 	}
+
+	s.guildsMu.Unlock()
 	s.guildChannelsMu.Unlock()
 
 	return nil
@@ -718,7 +720,7 @@ func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete
 // TODO maybe guild ban add and guild ban remove? Not sure....
 
 func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventGuildEmojisUpdate) error {
-	sg, ok := s.Guild(e.GuildID)
+	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errors.New("guild emojis updated for non existing guild")
 	}
@@ -729,7 +731,7 @@ func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventGuild
 }
 
 func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberAdd) error {
-	sg, ok := s.Guild(e.GuildID)
+	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errors.New("guild member added in non existing guild")
 	}
@@ -741,7 +743,7 @@ func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMem
 }
 
 func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberRemove) error {
-	sg, ok := s.Guild(e.GuildID)
+	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errors.New("guild member removed in non existing guild")
 	}
@@ -753,7 +755,7 @@ func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventGuild
 }
 
 func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberUpdate) error {
-	sg, ok := s.Guild(e.GuildID)
+	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errors.New("guild member updated in non existing guild")
 	}
@@ -791,7 +793,7 @@ func (s *State) updateGuildRole(ctx context.Context, conn *Conn, e *EventGuildRo
 }
 
 func (s *State) insertGuildRole(gID string, r *ModelRole) error {
-	sg, ok := s.Guild(gID)
+	sg, ok := s.guilds[gID]
 	if !ok {
 		return errUnknownGuild
 	}
@@ -802,7 +804,7 @@ func (s *State) insertGuildRole(gID string, r *ModelRole) error {
 }
 
 func (s *State) deleteGuildRole(ctx context.Context, conn *Conn, e *EventGuildRoleDelete) error {
-	sg, ok := s.Guild(e.GuildID)
+	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
 	}
@@ -816,7 +818,7 @@ func (s *State) deleteGuildRole(ctx context.Context, conn *Conn, e *EventGuildRo
 var errUnknownChannel = errors.New("unknown channel")
 
 func (s *State) createMessage(ctx context.Context, conn *Conn, e *EventMessageCreate) error {
-	sc, ok := s.Channel(e.ChannelID)
+	sc, ok := s.channel(e.ChannelID)
 	if !ok {
 		return errUnknownChannel
 	}
@@ -827,7 +829,7 @@ func (s *State) createMessage(ctx context.Context, conn *Conn, e *EventMessageCr
 }
 
 func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventMessageUpdate) error {
-	sc, ok := s.Channel(e.ChannelID)
+	sc, ok := s.channel(e.ChannelID)
 	if !ok {
 		return errUnknownChannel
 	}
@@ -839,11 +841,12 @@ func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventMessageUp
 			return nil
 		}
 	}
-	return errors.New("unknown message")
+	// Might not have the updated message cached.
+	return nil
 }
 
 func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventMessageDelete) error {
-	sc, ok := s.Channel(e.ChannelID)
+	sc, ok := s.channel(e.ChannelID)
 	if !ok {
 		return errUnknownChannel
 	}
@@ -855,14 +858,16 @@ func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventMessageDe
 			return nil
 		}
 	}
-	return errors.New("unknown message")
+	// Might not have the deleted message cached
+	return nil
 }
 
 func (s *State) bulkDeleteMessages(ctx context.Context, conn *Conn, e *EventMessageDeleteBulk) error {
-	sc, ok := s.Channel(e.ChannelID)
+	sc, ok := s.channel(e.ChannelID)
 	if !ok {
 		return errUnknownChannel
 	}
+
 	sc.messagesMu.Lock()
 	messages := make([]*ModelMessage, 0, len(sc.messages))
 messageLoop:
@@ -880,10 +885,11 @@ messageLoop:
 }
 
 func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventMessageReactionAdd) error {
-	sc, ok := s.Channel(e.ChannelID)
+	sc, ok := s.channel(e.ChannelID)
 	if !ok {
 		return errUnknownChannel
 	}
+
 	sc.messagesMu.Lock()
 	defer sc.messagesMu.Unlock()
 	for _, m := range sc.messages {
@@ -892,7 +898,8 @@ func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventMess
 			return nil
 		}
 	}
-	return errors.New("unknown message")
+	// Message not cached.
+	return nil
 }
 
 func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventMessageReactionRemove) error {
@@ -905,7 +912,7 @@ func (s *State) removeAllMessageReactions(ctx context.Context, conn *Conn, e *Ev
 }
 
 func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventPresenceUpdate) error {
-	sg, ok := s.Guild(e.GuildID)
+	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
 	}
@@ -923,7 +930,7 @@ func (s *State) updateUser(ctx context.Context, conn *Conn, e *EventUserUpdate) 
 }
 
 func (s *State) updateVoiceState(ctx context.Context, conn *Conn, e *EventVoiceStateUpdate) error {
-	sg, ok := s.Guild(e.GuildID)
+	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
 	}
