@@ -466,7 +466,7 @@ func (s *State) channel(cID string) (*StateChannel, bool) {
 
 func (s *State) handle(ctx context.Context, conn *Conn, e interface{}) (err error) {
 	switch e := e.(type) {
-	case *eventReady:
+	case *EventReady:
 		err = s.ready(ctx, conn, e)
 	case *EventChannelCreate:
 		err = s.createChannel(ctx, conn, e)
@@ -520,7 +520,7 @@ func (s *State) handle(ctx context.Context, conn *Conn, e interface{}) (err erro
 	return err
 }
 
-func (s *State) ready(ctx context.Context, conn *Conn, e *eventReady) error {
+func (s *State) ready(ctx context.Context, conn *Conn, e *EventReady) error {
 	// Access to this is serialized by the Conn goroutines so we don't need to protect it.
 	s.sessionID = e.SessionID
 

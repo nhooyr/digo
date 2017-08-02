@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-type eventReady struct {
+type EventReady struct {
 	V               int                 `json:"v"`
 	User            *ModelUser          `json:"user"`
 	PrivateChannels []*ModelChannel     `json:"private_channels"`
@@ -218,7 +218,7 @@ var errUnknownEvent = errors.New("unknown event")
 func getEventStruct(eventType string) (interface{}, error) {
 	switch eventType {
 	case "READY":
-		return new(eventReady), nil
+		return new(EventReady), nil
 	case "RESUMED":
 		return new(eventResumed), nil
 	case "CHANNEL_CREATE":

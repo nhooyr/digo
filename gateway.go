@@ -36,7 +36,7 @@ func (g endpointGateway) get() (url string, err error) {
 }
 
 type EventHandler interface {
-	Handle(ctx context.Context, conn *Conn, e interface{})
+	Handle(ctx context.Context, conn *Conn, e interface{}) error
 }
 
 type Conn struct {
@@ -499,6 +499,19 @@ func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
 			Err:       err,
 		}
 	}
+
+	// TODO i don't really like the way this works.
+	go func() {
+		err = c.eventHandler.Handle(ctx, c, e)
+		if err != nil {
+			err := &EventHandlerError{
+				EventName: p.Type,
+				Event:     e,
+				Err:       err,
+			}
+			c.errorHandler(err)
+		}
+	}()
 	return nil
 }
 
