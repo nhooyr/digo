@@ -69,6 +69,7 @@ type Conn struct {
 	sequenceNumber        int
 }
 
+
 type DialConfig struct {
 	Client       *Client
 	EventHandler EventHandler
@@ -89,7 +90,16 @@ func NewDialConfig() *DialConfig {
 		Logf: func(format string, v ...interface{}) {
 			log.Printf(format, v...)
 		},
+		EventHandler: EventHandlerFunc(func(ctx context.Context, conn *Conn, e interface{}) error {
+			return nil
+		}),
 	}
+}
+
+type EventHandlerFunc func(ctx context.Context, conn *Conn, e interface{}) error
+
+func (h EventHandlerFunc) Handle(ctx context.Context, conn *Conn, e interface{}) error  {
+	return h(ctx, conn, e)
 }
 
 func Dial(config *DialConfig) (*Conn, error) {
@@ -396,7 +406,7 @@ func (c *Conn) readPayload() (*receivedPayload, error) {
 	return &p, err
 }
 
-// TODO not sure if this is how I should do it
+// TODO https://github.com/golang/go/issues/4373
 func isUseOfClosedError(err error) bool {
 	opErr, ok := err.(*net.OpError)
 	if !ok {

@@ -224,61 +224,61 @@ func getEventStruct(eventType string) (interface{}, error) {
 	case "CHANNEL_CREATE":
 		return new(EventChannelCreate), nil
 	case "CHANNEL_UPDATE":
-		return new(*EventChannelUpdate), nil
+		return new(EventChannelUpdate), nil
 	case "CHANNEL_DELETE":
-		return new(*EventChannelDelete), nil
+		return new(EventChannelDelete), nil
 	case "GUILD_CREATE":
-		return new(*EventGuildCreate), nil
+		return new(EventGuildCreate), nil
 	case "GUILD_UPDATE":
-		return new(*EventGuildUpdate), nil
+		return new(EventGuildUpdate), nil
 	case "GUILD_DELETE":
-		return new(*EventGuildDelete), nil
+		return new(EventGuildDelete), nil
 	case "GUILD_BAN_ADD":
-		return new(*EventGuildBanAdd), nil
+		return new(EventGuildBanAdd), nil
 	case "GUILD_BAN_REMOVE":
-		return new(*EventGuildBanRemove), nil
+		return new(EventGuildBanRemove), nil
 	case "GUILD_EMOJIS_UPDATE":
-		return new(*EventGuildEmojisUpdate), nil
+		return new(EventGuildEmojisUpdate), nil
 	case "GUILD_INTEGRATIONS_UPDATE":
-		return new(*EventGuildIntegrationsUpdate), nil
+		return new(EventGuildIntegrationsUpdate), nil
 	case "GUILD_MEMBER_ADD":
-		return new(*EventGuildMemberAdd), nil
+		return new(EventGuildMemberAdd), nil
 	case "GUILD_MEMBER_REMOVE":
-		return new(*EventGuildMemberRemove), nil
+		return new(EventGuildMemberRemove), nil
 	case "GUILD_MEMBER_UPDATE":
-		return new(*EventGuildMemberUpdate), nil
+		return new(EventGuildMemberUpdate), nil
 	case "GUILD_MEMBERS_CHUNK":
-		return new(*EventGuildMembersChunk), nil
+		return new(EventGuildMembersChunk), nil
 	case "GUILD_ROLE_CREATE":
-		return new(*EventGuildRoleCreate), nil
+		return new(EventGuildRoleCreate), nil
 	case "GUILD_ROLE_UPDATE":
-		return new(*EventGuildRoleUpdate), nil
+		return new(EventGuildRoleUpdate), nil
 	case "GUILD_ROLE_DELETE":
-		return new(*EventGuildRoleDelete), nil
+		return new(EventGuildRoleDelete), nil
 	case "MESSAGE_CREATE":
-		return new(*EventMessageCreate), nil
+		return new(EventMessageCreate), nil
 	case "MESSAGE_UPDATE":
-		return new(*EventMessageUpdate), nil
+		return new(EventMessageUpdate), nil
 	case "MESSAGE_DELETE":
-		return new(*EventMessageDelete), nil
+		return new(EventMessageDelete), nil
 	case "MESSAGE_DELETE_BULK":
-		return new(*EventMessageDeleteBulk), nil
+		return new(EventMessageDeleteBulk), nil
 	case "MESSAGE_REACTION_ADD":
-		return new(*EventMessageReactionAdd), nil
+		return new(EventMessageReactionAdd), nil
 	case "MESSAGE_REACTION_REMOVE":
-		return new(*EventMessageReactionRemove), nil
+		return new(EventMessageReactionRemove), nil
 	case "MESSAGE_REACTION_REMOVE_ALL":
-		return new(*EventMessageReactionRemoveAll), nil
+		return new(EventMessageReactionRemoveAll), nil
 	case "PRESENCE_UPDATE":
-		return new(*EventPresenceUpdate), nil
+		return new(EventPresenceUpdate), nil
 	case "TYPING_START":
-		return new(*EventTypingStart), nil
+		return new(EventTypingStart), nil
 	case "USER_UPDATE":
-		return new(*EventUserUpdate), nil
+		return new(EventUserUpdate), nil
 	case "VOICE_STATE_UPDATE":
-		return new(*EventVoiceStateUpdate), nil
+		return new(EventVoiceStateUpdate), nil
 	case "VOICE_SERVER_UPDATE":
-		return new(*eventVoiceServerUpdate), nil
+		return new(eventVoiceServerUpdate), nil
 	}
 	return nil, errUnknownEvent
 }

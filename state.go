@@ -652,6 +652,8 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 		sg.presences[p.User.ID] = p
 	}
 
+	sg.channels = make(map[string]*StateChannel)
+
 	sgOld, ok := s.guilds[e.ID]
 
 	s.guildsMu.Lock()
@@ -935,7 +937,11 @@ func (s *State) updateVoiceState(ctx context.Context, conn *Conn, e *EventVoiceS
 		return errUnknownGuild
 	}
 	sg.voiceStatesMu.Lock()
-	sg.voiceStates[e.UserID] = &e.ModelVoiceState
+	if e.ChannelID == "" {
+		delete(sg.voiceStates, e.UserID)
+	} else {
+		sg.voiceStates[e.UserID] = &e.ModelVoiceState
+	}
 	sg.voiceStatesMu.Unlock()
 	return nil
 }
