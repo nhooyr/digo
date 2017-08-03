@@ -49,8 +49,8 @@ type StateGuild struct {
 	presences map[string]*ModelPresence
 }
 
-// TODO any of these style methods do not always need to lock, e.g. when a guild is created
 func (sg *StateGuild) updateFromModel(g *ModelGuild) {
+	// Not always necessary, e.g. on creation. But I don't think it's worth optimizing.
 	sg.modelMu.Lock()
 	sg.rolesMu.Lock()
 	sg.emojisMu.Lock()
@@ -286,9 +286,6 @@ type StateChannel struct {
 	icon                 string
 	ownerID              string
 	applicationID        string
-
-	messagesMu sync.RWMutex
-	messages   []*ModelMessage
 }
 
 func (sc *StateChannel) ID() string {
@@ -379,16 +376,8 @@ func (sc *StateChannel) ApplicationID() string {
 	return sc.applicationID
 }
 
-// Messages returns a copy of the current messages. The last message is the most recent.
-func (sc *StateChannel) Messages() []*ModelMessage {
-	sc.messagesMu.RLock()
-	messages := make([]*ModelMessage, len(sc.messages))
-	copy(messages, sc.messages)
-	sc.messagesMu.RUnlock()
-	return messages
-}
-
 func (sc *StateChannel) updateFromModel(c *ModelChannel) {
+	// Not always necessary, e.g. on creation. But I don't think it's worth optimizing.
 	sc.mu.Lock()
 	sc.id = c.ID
 	sc.chanType = c.Type
@@ -406,12 +395,15 @@ func (sc *StateChannel) updateFromModel(c *ModelChannel) {
 	sc.mu.Unlock()
 }
 
-func (sc *StateChannel) appendMessage() {
-
-}
+// State errors.
+var (
+	errUnknownGuild       = errors.New("unknown guild")
+	errHandled            = errors.New("no need to handle the event further")
+	errUnknownGuildMember = errors.New("unknown guild member")
+	errGuildAlreadyExists = errors.New("guild already exists?")
+)
 
 // State stored from websocket events.
-// TODO should I just expose a single RWMutex for state and allow caller to lock/unlock? It would allow them to have better control. E.g. they would never get inconsistent data because they can hold RLock for longer than a single call.
 type State struct {
 	sessionID string
 
@@ -426,7 +418,7 @@ type State struct {
 	guildsMu sync.RWMutex
 	guilds   map[string]*StateGuild
 	// I have a separate map for guild channels because messages only store Channel IDs, no Guild IDs.
-	// So if someone wanted to find the guild channel in which a message was sent, they would have to search
+	// So if a bot wanted to find the guild channel in which a message was sent, they would have to search
 	// all guilds and their channels.
 	guildChannelsMu sync.RWMutex
 	guildChannels   map[string]*StateChannel
@@ -496,20 +488,6 @@ func (s *State) handle(ctx context.Context, conn *Conn, e interface{}) (err erro
 		err = s.updateGuildRole(ctx, conn, e)
 	case *EventGuildRoleDelete:
 		err = s.deleteGuildRole(ctx, conn, e)
-	case *EventMessageCreate:
-		err = s.createMessage(ctx, conn, e)
-	case *EventMessageUpdate:
-		err = s.updateMessage(ctx, conn, e)
-	case *EventMessageDelete:
-		err = s.deleteMessage(ctx, conn, e)
-	case *EventMessageDeleteBulk:
-		err = s.bulkDeleteMessages(ctx, conn, e)
-	case *EventMessageReactionAdd:
-		err = s.addMessageReaction(ctx, conn, e)
-	case *EventMessageReactionRemove:
-		err = s.removeMessageReaction(ctx, conn, e)
-	case *EventMessageReactionRemoveAll:
-		err = s.removeAllMessageReactions(ctx, conn, e)
 	case *EventPresenceUpdate:
 		err = s.updatePresence(ctx, conn, e)
 	case *EventUserUpdate:
@@ -584,7 +562,7 @@ func (s *State) insertChannel(c *ModelChannel) error {
 
 	sg, ok := s.guilds[c.GuildID]
 	if !ok {
-		return errors.New("a channel created/updated for an unknown guild")
+		return errUnknownGuild
 	}
 
 	sc = new(StateChannel)
@@ -610,7 +588,7 @@ func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDe
 
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
-		return errors.New("a channel deleted for an unknown guild")
+		return errUnknownGuild
 	}
 
 	s.guildChannelsMu.Lock()
@@ -622,8 +600,6 @@ func (s *State) deleteChannel(ctx context.Context, conn *Conn, e *EventChannelDe
 
 	return nil
 }
-
-var errHandled = errors.New("no need to handle the event further")
 
 func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate) error {
 	sg := new(StateGuild)
@@ -660,7 +636,6 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 	s.guildChannelsMu.Lock()
 	for _, c := range e.Channels {
 		sc := new(StateChannel)
-		// TODO updateFromModel locks but this is a brand new StateChannel so no locking necessary. maybe change later.
 		sc.updateFromModel(c)
 
 		sg.channels[c.ID] = sc
@@ -678,7 +653,7 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 		}
 		// We updated the guild map even though the state is now corrupt.
 		// Shouldn't really be an issue though.
-		return errors.New("guild already exists?")
+		return errGuildAlreadyExists
 	}
 	return nil
 }
@@ -686,7 +661,7 @@ func (s *State) createGuild(ctx context.Context, conn *Conn, e *EventGuildCreate
 func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventGuildUpdate) error {
 	sg, ok := s.guilds[e.ID]
 	if !ok {
-		return errors.New("non existing guild updated?")
+		return errUnknownGuild
 	}
 	sg.updateFromModel(&e.ModelGuild)
 	return nil
@@ -695,7 +670,7 @@ func (s *State) updateGuild(ctx context.Context, conn *Conn, e *EventGuildUpdate
 func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete) error {
 	sg, ok := s.guilds[e.ID]
 	if !ok {
-		return errors.New("non existing guild deleted")
+		return errUnknownGuild
 	}
 
 	s.guildsMu.Lock()
@@ -719,12 +694,10 @@ func (s *State) deleteGuild(ctx context.Context, conn *Conn, e *EventGuildDelete
 	return nil
 }
 
-// TODO maybe guild ban add and guild ban remove? Not sure....
-
 func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventGuildEmojisUpdate) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
-		return errors.New("guild emojis updated for non existing guild")
+		return errUnknownGuild
 	}
 	sg.emojisMu.Lock()
 	sg.emojis = e.Emojis
@@ -735,7 +708,7 @@ func (s *State) updateGuildEmojis(ctx context.Context, conn *Conn, e *EventGuild
 func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberAdd) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
-		return errors.New("guild member added in non existing guild")
+		return errUnknownGuild
 	}
 	sg.membersMu.Lock()
 	sg.memberCount++
@@ -747,7 +720,7 @@ func (s *State) addGuildMember(ctx context.Context, conn *Conn, e *EventGuildMem
 func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberRemove) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
-		return errors.New("guild member removed in non existing guild")
+		return errUnknownGuild
 	}
 	sg.membersMu.Lock()
 	sg.memberCount--
@@ -759,13 +732,13 @@ func (s *State) removeGuildMember(ctx context.Context, conn *Conn, e *EventGuild
 func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventGuildMemberUpdate) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
-		return errors.New("guild member updated in non existing guild")
+		return errUnknownGuild
 	}
 	sg.membersMu.Lock()
 	defer sg.membersMu.Unlock()
 	gm, ok := sg.members[e.User.ID]
 	if !ok {
-		return errors.New("guild member updated in a guild in which it never joined?")
+		return errUnknownGuildMember
 	}
 	sg.members[e.User.ID] = &ModelGuildMember{
 		User:     &e.User,
@@ -782,9 +755,6 @@ func (s *State) updateGuildMember(ctx context.Context, conn *Conn, e *EventGuild
 func (s *State) chunkGuildMembers(ctx context.Context, conn *Conn, e *EventGuildMembersChunk) error {
 	panic("TODO")
 }
-
-// TODO use this in more places
-var errUnknownGuild = errors.New("unknown guild")
 
 func (s *State) createGuildRole(ctx context.Context, conn *Conn, e *EventGuildRoleCreate) error {
 	return s.insertGuildRole(e.GuildID, &e.Role)
@@ -814,103 +784,6 @@ func (s *State) deleteGuildRole(ctx context.Context, conn *Conn, e *EventGuildRo
 	delete(sg.roles, e.Role.ID)
 	sg.rolesMu.Unlock()
 	return nil
-}
-
-// TODO use everywhere
-var errUnknownChannel = errors.New("unknown channel")
-
-func (s *State) createMessage(ctx context.Context, conn *Conn, e *EventMessageCreate) error {
-	sc, ok := s.channel(e.ChannelID)
-	if !ok {
-		return errUnknownChannel
-	}
-	sc.messagesMu.Lock()
-	sc.messages = append(sc.messages, &e.ModelMessage)
-	sc.messagesMu.Unlock()
-	return nil
-}
-
-func (s *State) updateMessage(ctx context.Context, conn *Conn, e *EventMessageUpdate) error {
-	sc, ok := s.channel(e.ChannelID)
-	if !ok {
-		return errUnknownChannel
-	}
-	sc.messagesMu.Lock()
-	defer sc.messagesMu.Unlock()
-	for i, m := range sc.messages {
-		if m.ID == e.ID {
-			sc.messages[i] = &e.ModelMessage
-			return nil
-		}
-	}
-	// Might not have the updated message cached.
-	return nil
-}
-
-func (s *State) deleteMessage(ctx context.Context, conn *Conn, e *EventMessageDelete) error {
-	sc, ok := s.channel(e.ChannelID)
-	if !ok {
-		return errUnknownChannel
-	}
-	sc.messagesMu.Lock()
-	defer sc.messagesMu.Unlock()
-	for i, m := range sc.messages {
-		if m.ID == e.ID {
-			sc.messages = append(sc.messages[:i], sc.messages[i+1:]...)
-			return nil
-		}
-	}
-	// Might not have the deleted message cached
-	return nil
-}
-
-func (s *State) bulkDeleteMessages(ctx context.Context, conn *Conn, e *EventMessageDeleteBulk) error {
-	sc, ok := s.channel(e.ChannelID)
-	if !ok {
-		return errUnknownChannel
-	}
-
-	sc.messagesMu.Lock()
-	messages := make([]*ModelMessage, 0, len(sc.messages))
-messageLoop:
-	for _, m := range sc.messages {
-		for _, mID := range e.IDs {
-			if mID == m.ID {
-				continue messageLoop
-			}
-		}
-		messages = append(messages, m)
-	}
-	sc.messages = messages
-	sc.messagesMu.Unlock()
-	return nil
-}
-
-func (s *State) addMessageReaction(ctx context.Context, conn *Conn, e *EventMessageReactionAdd) error {
-	sc, ok := s.channel(e.ChannelID)
-	if !ok {
-		return errUnknownChannel
-	}
-
-	sc.messagesMu.Lock()
-	defer sc.messagesMu.Unlock()
-	for _, m := range sc.messages {
-		if m.ID == e.MessageID {
-			// TODO, make StateMessage
-			return nil
-		}
-	}
-	// Message not cached.
-	return nil
-}
-
-func (s *State) removeMessageReaction(ctx context.Context, conn *Conn, e *EventMessageReactionRemove) error {
-	panic("TODO")
-}
-
-// TODO slightly misleading name
-func (s *State) removeAllMessageReactions(ctx context.Context, conn *Conn, e *EventMessageReactionRemoveAll) error {
-	panic("TODO")
 }
 
 func (s *State) updatePresence(ctx context.Context, conn *Conn, e *EventPresenceUpdate) error {

@@ -2,13 +2,14 @@ package discgo
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 )
 
 var (
 	cID   = "331307058660114433"
-	mID   = "334104659767590912"
+	mID   = "342651739381432320"
 	emoji = "🍰"
 )
 
@@ -21,6 +22,15 @@ func TestClient_GetChannelMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(messages[0].Content)
+}
+
+func TestClient_GetChannelMessage(t *testing.T)  {
+	m, err := client.Channel(cID).Message(mID).Get(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.MarshalIndent(m, "", "    ")
+	t.Logf("%s", b)
 }
 
 func TestClient_CreateMessage(t *testing.T) {

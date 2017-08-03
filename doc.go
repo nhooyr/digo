@@ -6,13 +6,10 @@ TODO update test names
 TODO no race conditions in gateway.go and it implements everything correctly?
 TODO which events need to be public?
 TODO https://discordapp.com/developers/docs/topics/oauth2#get-current-application-information
-TODO sharding
 TODO do not modify any event data in handlers
 TODO why are presence updates given an entire user object? why not just a user id?
 TODO presence update for user that was originally offline when bot joined a large guild? Will it contain all fields?
-TODO no message state tracking maybe?
-TODO use map everywhere except for messages, and messages slice will have very low capacity.
-TODO am I overusing sync.RWMutex? Benchmark maybe.
+TODO https://discordapp.com/developers/docs/resources/audit-log
 
 RestAPI does not use One Methods e.g. Channels().One(cID) because too much stutter.
 RestAPI does not have all methods defined on single Client because too little structure and hard code completion/doc finding
