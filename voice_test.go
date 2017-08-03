@@ -1,9 +1,12 @@
 package discgo
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestClient_GetVoiceRegions(t *testing.T) {
-	regions, err := client.VoiceRegions().Get()
+	regions, err := client.VoiceRegions().Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package discgo
 
 import (
+	"context"
 	"net/url"
 	"strconv"
 	"time"
@@ -121,8 +122,8 @@ type ParamsGuildChannelCreate struct {
 }
 
 // TODO Docs for this are not clear on what the Channels field should be, and the link for that field is broken.
-func (e EndpointGuilds) Create(params *ParamsGuildsCreate) (g *ModelGuild, err error) {
-	return g, e.doMethod("POST", params, &g)
+func (e EndpointGuilds) Create(ctx context.Context, params *ParamsGuildsCreate) (g *ModelGuild, err error) {
+	return g, e.doMethod(ctx, "POST", params, &g)
 }
 
 // TODO all endpoints need to be value receivers and returns!!!
@@ -135,8 +136,8 @@ func (c *Client) Guild(gID string) EndpointGuild {
 	return EndpointGuild{e2}
 }
 
-func (e EndpointGuild) Get(gID string) (g *ModelGuild, err error) {
-	return g, e.doMethod("GET", nil, &g)
+func (e EndpointGuild) Get(ctx context.Context, gID string) (g *ModelGuild, err error) {
+	return g, e.doMethod(ctx, "GET", nil, &g)
 }
 
 type ParamsGuildModify struct {
@@ -151,12 +152,12 @@ type ParamsGuildModify struct {
 	Splash                      string `json:"splash,omitempty"`
 }
 
-func (e EndpointGuild) Modify(params *ParamsGuildModify) (g *ModelGuild, err error) {
-	return g, e.doMethod("PATCH", params, &g)
+func (e EndpointGuild) Modify(ctx context.Context, params *ParamsGuildModify) (g *ModelGuild, err error) {
+	return g, e.doMethod(ctx, "PATCH", params, &g)
 }
 
-func (e EndpointGuild) Delete() (g *ModelGuild, err error) {
-	return g, e.doMethod("DELETE", nil, &g)
+func (e EndpointGuild) Delete(ctx context.Context) (g *ModelGuild, err error) {
+	return g, e.doMethod(ctx, "DELETE", nil, &g)
 }
 
 type EndpointGuildMe struct {
@@ -170,13 +171,13 @@ func (e EndpointGuild) Me() EndpointGuildMe {
 
 // TODO not sure if necessary, there is a EndpointGuildMember.Modify, not sure if it takes @me. @abalabahaha#9421 on discord said that perhaps its different because modifying my nick and managing others is a different permission but that does not really make sense to me. But whatever...
 // TODO i also don't really like the name, doesn't fit in
-func (e EndpointGuildMe) ModifyNick(nick string) (newNick string, err error) {
+func (e EndpointGuildMe) ModifyNick(ctx context.Context, nick string) (newNick string, err error) {
 	nickStruct := struct {
 		Nick string `json:"nick"`
 	}{
 		Nick: nick,
 	}
-	return nickStruct.Nick, e.doMethod("PATCH", nickStruct, &nickStruct)
+	return nickStruct.Nick, e.doMethod(ctx, "PATCH", nickStruct, &nickStruct)
 }
 
 type EndpointGuildChannels struct {
@@ -188,12 +189,12 @@ func (e EndpointGuild) Channels() EndpointGuildChannels {
 	return EndpointGuildChannels{e2}
 }
 
-func (e EndpointGuildChannels) Get() (channels []*ModelChannel, err error) {
-	return channels, e.doMethod("GET", nil, &channels)
+func (e EndpointGuildChannels) Get(ctx context.Context) (channels []*ModelChannel, err error) {
+	return channels, e.doMethod(ctx, "GET", nil, &channels)
 }
 
-func (e EndpointGuildChannels) Create(params *ParamsGuildChannelCreate) (ch *ModelChannel, err error) {
-	return ch, e.doMethod("POST", params, &ch)
+func (e EndpointGuildChannels) Create(ctx context.Context, params *ParamsGuildChannelCreate) (ch *ModelChannel, err error) {
+	return ch, e.doMethod(ctx, "POST", params, &ch)
 }
 
 type ParamsGuildChannelsModifyPositions struct {
@@ -201,8 +202,8 @@ type ParamsGuildChannelsModifyPositions struct {
 	Position int    `json:"position"`
 }
 
-func (e EndpointGuildChannels) ModifyPositions(params []*ParamsGuildChannelsModifyPositions) (channels *ModelChannel, err error) {
-	return channels, e.doMethod("PATCH", params, &channels)
+func (e EndpointGuildChannels) ModifyPositions(ctx context.Context, params []*ParamsGuildChannelsModifyPositions) (channels *ModelChannel, err error) {
+	return channels, e.doMethod(ctx, "PATCH", params, &channels)
 }
 
 type EndpointGuildMembers struct {
@@ -231,8 +232,8 @@ func (params *ParamsGuildMembersGet) rawQuery() string {
 	return v.Encode()
 }
 
-func (e EndpointGuildMembers) Get(params *ParamsGuildMembersGet) (guildMembers []*ModelGuildMember, err error) {
-	req := e.newRequest("GET", nil)
+func (e EndpointGuildMembers) Get(ctx context.Context, params *ParamsGuildMembersGet) (guildMembers []*ModelGuildMember, err error) {
+	req := e.newRequest(ctx, "GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
 	}
@@ -256,12 +257,12 @@ type ParamsGuildMemberAdd struct {
 	Deaf        bool         `json:"deaf,omitempty"`
 }
 
-func (e EndpointGuildMember) Add(params *ParamsGuildMemberAdd) (gm *ModelGuildMember, err error) {
-	return gm, e.doMethod("PUT", params, &gm)
+func (e EndpointGuildMember) Add(ctx context.Context, params *ParamsGuildMemberAdd) (gm *ModelGuildMember, err error) {
+	return gm, e.doMethod(ctx, "PUT", params, &gm)
 }
 
-func (e EndpointGuildMember) Get() (gm *ModelGuildMember, err error) {
-	return gm, e.doMethod("GET", nil, &gm)
+func (e EndpointGuildMember) Get(ctx context.Context) (gm *ModelGuildMember, err error) {
+	return gm, e.doMethod(ctx, "GET", nil, &gm)
 }
 
 // TODO rename this and all other params to postfix params
@@ -273,8 +274,8 @@ type ParamsGuildMemberModify struct {
 	ChannelID string       `json:"channel_id,omitempty"`
 }
 
-func (e EndpointGuildMember) Modify(params *ParamsGuildMemberModify) error {
-	return e.doMethod("PATCH", params, nil)
+func (e EndpointGuildMember) Modify(ctx context.Context, params *ParamsGuildMemberModify) error {
+	return e.doMethod(ctx, "PATCH", params, nil)
 }
 
 type EndpointGuildMemberRole struct {
@@ -286,16 +287,16 @@ func (e EndpointGuildMember) Role(roleID string) EndpointGuildMemberRole {
 	return EndpointGuildMemberRole{e2}
 }
 
-func (e EndpointGuildMemberRole) Add() error {
-	return e.doMethod("PUT", nil, nil)
+func (e EndpointGuildMemberRole) Add(ctx context.Context) error {
+	return e.doMethod(ctx, "PUT", nil, nil)
 }
 
-func (e EndpointGuildMemberRole) Remove() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointGuildMemberRole) Remove(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
-func (e EndpointGuildMember) Remove() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointGuildMember) Remove(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
 type EndpointGuildBans struct {
@@ -307,8 +308,8 @@ func (e EndpointGuild) Bans() EndpointGuildBans {
 	return EndpointGuildBans{e2}
 }
 
-func (e EndpointGuildBans) Get() (users []*ModelUser, err error) {
-	return users, e.doMethod("GET", nil, &users)
+func (e EndpointGuildBans) Get(ctx context.Context) (users []*ModelUser, err error) {
+	return users, e.doMethod(ctx, "GET", nil, &users)
 }
 
 type EndpointGuildBan struct {
@@ -324,11 +325,11 @@ type ParamsGuildBanCreate struct {
 	DeleteMessageDays int `json:"delete-message-days"`
 }
 
-func (e EndpointGuildBan) Create(params *ParamsGuildBanCreate) error {
-	return e.doMethod("PUT", params, nil)
+func (e EndpointGuildBan) Create(ctx context.Context, params *ParamsGuildBanCreate) error {
+	return e.doMethod(ctx, "PUT", params, nil)
 }
-func (e EndpointGuildBan) Remove() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointGuildBan) Remove(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
 // TODO maybe guildrole instead?
@@ -341,8 +342,8 @@ func (e EndpointGuild) Roles() EndpointRoles {
 	return EndpointRoles{e2}
 }
 
-func (e EndpointRoles) Get() (roles []*ModelRole, err error) {
-	return roles, e.doMethod("GET", nil, &roles)
+func (e EndpointRoles) Get(ctx context.Context) (roles []*ModelRole, err error) {
+	return roles, e.doMethod(ctx, "GET", nil, &roles)
 }
 
 type ParamsRoleCreate struct {
@@ -354,8 +355,8 @@ type ParamsRoleCreate struct {
 	Mentionable bool `json:"mentionable,omitempty"`
 }
 
-func (e EndpointRoles) Create(params *ParamsRoleCreate) (r *ModelRole, err error) {
-	return r, e.doMethod("GET", params, &r)
+func (e EndpointRoles) Create(ctx context.Context, params *ParamsRoleCreate) (r *ModelRole, err error) {
+	return r, e.doMethod(ctx, "GET", params, &r)
 }
 
 type ParamsRolesModifyPositions struct {
@@ -363,8 +364,8 @@ type ParamsRolesModifyPositions struct {
 	Position int    `json:"position"`
 }
 
-func (e EndpointRoles) ModifyPositions(params *ParamsRolesModifyPositions) (roles []*ModelRole, err error) {
-	return roles, e.doMethod("PATCH", params, &roles)
+func (e EndpointRoles) ModifyPositions(ctx context.Context, params *ParamsRolesModifyPositions) (roles []*ModelRole, err error) {
+	return roles, e.doMethod(ctx, "PATCH", params, &roles)
 }
 
 type EndpointRole struct {
@@ -385,12 +386,12 @@ type ParamsRoleModify struct {
 	Mentionable bool   `json:"mentionable,omitempty"`
 }
 
-func (e EndpointRole) Modify(params *ParamsRoleModify) (r *ModelRole, err error) {
-	return r, e.doMethod("PATCH", params, &r)
+func (e EndpointRole) Modify(ctx context.Context, params *ParamsRoleModify) (r *ModelRole, err error) {
+	return r, e.doMethod(ctx, "PATCH", params, &r)
 }
 
-func (e EndpointRole) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointRole) Delete(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
 // TODO i don't like the api because prune is a verb :(. same as bulk-delete ****
@@ -403,8 +404,8 @@ func (e EndpointGuild) Prune() EndpointPrune {
 	return EndpointPrune{e2}
 }
 
-func (e EndpointPrune) GetCount(days int) (count int, err error) {
-	req := e.newRequest("GET", nil)
+func (e EndpointPrune) GetCount(ctx context.Context, days int) (count int, err error) {
+	req := e.newRequest(ctx, "GET", nil)
 	if days > 0 {
 		v := url.Values{}
 		v.Set("days", strconv.Itoa(days))
@@ -417,8 +418,8 @@ func (e EndpointPrune) GetCount(days int) (count int, err error) {
 	return countStruct.Count, e.do(req, &countStruct)
 }
 
-func (e EndpointPrune) Begin(days int) (pruned int, err error) {
-	req := e.newRequest("POST", nil)
+func (e EndpointPrune) Begin(ctx context.Context, days int) (pruned int, err error) {
+	req := e.newRequest(ctx, "POST", nil)
 	if days > 0 {
 		v := url.Values{}
 		v.Set("days", strconv.Itoa(days))
@@ -449,8 +450,8 @@ func (e EndpointGuild) Integrations() EndpointIntegrations {
 	return EndpointIntegrations{e2}
 }
 
-func (e EndpointIntegrations) Get() (integrations []*ModelIntegration, err error) {
-	return integrations, e.doMethod("GET", nil, &integrations)
+func (e EndpointIntegrations) Get(ctx context.Context) (integrations []*ModelIntegration, err error) {
+	return integrations, e.doMethod(ctx, "GET", nil, &integrations)
 }
 
 type ParamsIntegrationsCreate struct {
@@ -458,8 +459,8 @@ type ParamsIntegrationsCreate struct {
 	ID   string `json:"id"`
 }
 
-func (e EndpointIntegrations) Create(params *ParamsIntegrationsCreate) error {
-	return e.doMethod("POST", params, nil)
+func (e EndpointIntegrations) Create(ctx context.Context, params *ParamsIntegrationsCreate) error {
+	return e.doMethod(ctx, "POST", params, nil)
 }
 
 type EndpointIntegration struct {
@@ -478,17 +479,17 @@ type ParamsIntegrationModify struct {
 	EnableEmoticons   bool `json:"enable_emoticons,omitempty"`
 }
 
-func (e EndpointIntegration) Modify(params *ParamsIntegrationModify) error {
-	return e.doMethod("PATCH", params, nil)
+func (e EndpointIntegration) Modify(ctx context.Context, params *ParamsIntegrationModify) error {
+	return e.doMethod(ctx, "PATCH", params, nil)
 }
 
-func (e EndpointIntegration) Delete(gID, integrationID string) error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointIntegration) Delete(ctx context.Context, gID, integrationID string) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
-func (e EndpointIntegration) Sync() error {
+func (e EndpointIntegration) Sync(ctx context.Context) error {
 	e2 := e.appendMajor("sync")
-	return e2.doMethod("POST", nil, nil)
+	return e2.doMethod(ctx, "POST", nil, nil)
 }
 
 type EndpointGuildEmbed struct {
@@ -500,10 +501,10 @@ func (e EndpointGuild) Embed() EndpointGuildEmbed {
 	return EndpointGuildEmbed{e2}
 }
 
-func (e EndpointGuildEmbed) Get() (ge *ModelGuildEmbed, err error) {
-	return ge, e.doMethod("GET", nil, &ge)
+func (e EndpointGuildEmbed) Get(ctx context.Context) (ge *ModelGuildEmbed, err error) {
+	return ge, e.doMethod(ctx, "GET", nil, &ge)
 }
 
-func (e EndpointGuildEmbed) Modify(ge *ModelGuildEmbed) (newGE *ModelGuildEmbed, err error) {
-	return newGE, e.doMethod("PATCH", ge, &newGE)
+func (e EndpointGuildEmbed) Modify(ctx context.Context, ge *ModelGuildEmbed) (newGE *ModelGuildEmbed, err error) {
+	return newGE, e.doMethod(ctx, "PATCH", ge, &newGE)
 }

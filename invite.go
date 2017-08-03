@@ -1,6 +1,7 @@
 package discgo
 
 import (
+	"context"
 	"time"
 )
 
@@ -41,14 +42,14 @@ func (c *Client) Invite(inviteCode string) EndpointInvite {
 	return EndpointInvite{e2}
 }
 
-func (e EndpointInvite) Get() (inv *ModelInvite, err error) {
-	return inv, e.doMethod("GET", nil, &inv)
+func (e EndpointInvite) Get(ctx context.Context) (inv *ModelInvite, err error) {
+	return inv, e.doMethod(ctx, "GET", nil, &inv)
 }
 
-func (e EndpointInvite) Delete() (inv *ModelInvite, err error) {
-	return inv, e.doMethod("DELETE", nil, &inv)
+func (e EndpointInvite) Delete(ctx context.Context) (inv *ModelInvite, err error) {
+	return inv, e.doMethod(ctx, "DELETE", nil, &inv)
 }
 
-func (e EndpointInvite) Accept() (inv *ModelInvite, err error) {
-	return inv, e.doMethod("POST", nil, &inv)
+func (e EndpointInvite) Accept(ctx context.Context) (inv *ModelInvite, err error) {
+	return inv, e.doMethod(ctx, "POST", nil, &inv)
 }

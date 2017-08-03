@@ -1,6 +1,7 @@
 package discgo
 
 import (
+	"context"
 	"testing"
 )
 
@@ -10,7 +11,7 @@ func TestClient_CreateGuild(t *testing.T) {
 	params := &ParamsGuildsCreate{
 		Name: "REKTERONIED",
 	}
-	g, err := client.Guilds().Create(params)
+	g, err := client.Guilds().Create(context.Background(),params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,7 +19,7 @@ func TestClient_CreateGuild(t *testing.T) {
 }
 
 func TestClient_DeleteGuild(t *testing.T) {
-	g, err := client.Guild(gID).Delete()
+	g, err := client.Guild(gID).Delete(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +27,7 @@ func TestClient_DeleteGuild(t *testing.T) {
 }
 
 func TestClient_GetChannels(t *testing.T) {
-	channels, err := client.Guild(gID).Channels().Get()
+	channels, err := client.Guild(gID).Channels().Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +35,7 @@ func TestClient_GetChannels(t *testing.T) {
 }
 
 func TestClient_GetGuildMember(t *testing.T) {
-	gm, err := client.Guild(gID).Member(uID).Get()
+	gm, err := client.Guild(gID).Member(uID).Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestClient_GetGuildMember(t *testing.T) {
 }
 
 func TestClient_GetGuildMembers(t *testing.T) {
-	guildMembers, err := client.Guild(gID).Members().Get(nil)
+	guildMembers, err := client.Guild(gID).Members().Get(context.Background(),nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,14 +58,14 @@ func TestClient_ModifyGuildMember(t *testing.T) {
 	params := &ParamsGuildMemberModify{
 		Nick: "fdkg",
 	}
-	err := client.Guild(gID).Member(uID).Modify(params)
+	err := client.Guild(gID).Member(uID).Modify(context.Background(),params)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClient_ModifyMyNick(t *testing.T) {
-	nick, err := client.Guild(gID).Me().ModifyNick("xd RssEKT")
+	nick, err := client.Guild(gID).Me().ModifyNick(context.Background(),"xd RssEKT")
 	if err != nil {
 		t.Fatal(err)
 	}

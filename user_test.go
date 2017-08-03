@@ -1,11 +1,14 @@
 package discgo
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 var uID = "97133780153683968"
 
 func TestClient_GetUser(t *testing.T) {
-	u, err := client.Me().Get()
+	u, err := client.Me().Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -13,7 +16,7 @@ func TestClient_GetUser(t *testing.T) {
 }
 
 func TestClient_GetMyGuilds(t *testing.T) {
-	guilds, err := client.Me().Guilds().Get(nil)
+	guilds, err := client.Me().Guilds().Get(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

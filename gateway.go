@@ -19,20 +19,39 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type endpointGateway struct {
+type EndpointGateway struct {
 	*endpoint
 }
 
-func (c *Client) gateway() endpointGateway {
+func (c *Client) Gateway() EndpointGateway {
 	e2 := c.e.appendMajor("gateway")
-	return endpointGateway{e2}
+	return EndpointGateway{e2}
 }
 
-func (g endpointGateway) get() (url string, err error) {
+func (e EndpointGateway) get() (url string, err error) {
 	var urlStruct struct {
 		URL string `json:"url"`
 	}
-	return urlStruct.URL, g.doMethod("GET", nil, &urlStruct)
+	return urlStruct.URL, e.doMethod(context.Background(), "GET", nil, &urlStruct)
+}
+
+func (e EndpointGateway) Bot() EndpointGatewayBot {
+	e2 := e.appendMajor("bot")
+	return EndpointGatewayBot{e2}
+}
+
+type EndpointGatewayBot struct {
+	*endpoint
+}
+
+// TODO kinda awkward
+type ModelGatewayBotResp struct {
+	URL    string `json:"url"`
+	Shards int    `json:"shards"`
+}
+
+func (e EndpointGatewayBot) Get(ctx context.Context) (resp *ModelGatewayBotResp, err error) {
+	return resp, e.doMethod(ctx, "GET", nil, &resp)
 }
 
 type EventHandler interface {
@@ -69,7 +88,6 @@ type Conn struct {
 	sequenceNumber        int
 }
 
-
 type DialConfig struct {
 	Client       *Client
 	EventHandler EventHandler
@@ -98,7 +116,7 @@ func NewDialConfig() *DialConfig {
 
 type EventHandlerFunc func(ctx context.Context, conn *Conn, e interface{}) error
 
-func (h EventHandlerFunc) Handle(ctx context.Context, conn *Conn, e interface{}) error  {
+func (h EventHandlerFunc) Handle(ctx context.Context, conn *Conn, e interface{}) error {
 	return h(ctx, conn, e)
 }
 
@@ -136,7 +154,7 @@ func (c *Conn) dial() (err error) {
 
 	if c.gatewayURL == "" {
 		// TODO hardcoding this means we cannot use the bot gateway endpoint that returns the # of shards to use.
-		c.gatewayURL, err = c.Client.gateway().get()
+		c.gatewayURL, err = c.Client.Gateway().get()
 		if err != nil {
 			return err
 		}

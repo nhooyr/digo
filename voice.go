@@ -1,5 +1,7 @@
 package discgo
 
+import "context"
+
 type ModelVoiceState struct {
 	GuildID   string `json:"guild_id"`
 	ChannelID string `json:"channel_id"`
@@ -32,6 +34,6 @@ func (c *Client) VoiceRegions() EndpointVoiceRegions {
 	return EndpointVoiceRegions{e2}
 }
 
-func (e EndpointVoiceRegions) Get() (voiceRegions []*ModelVoiceRegion, err error) {
-	return voiceRegions, e.doMethod("GET", nil, &voiceRegions)
+func (e EndpointVoiceRegions) Get(ctx context.Context) (voiceRegions []*ModelVoiceRegion, err error) {
+	return voiceRegions, e.doMethod(ctx, "GET", nil, &voiceRegions)
 }

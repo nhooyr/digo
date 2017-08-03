@@ -1,6 +1,7 @@
 package discgo
 
 import (
+	"context"
 	"net/url"
 	"strconv"
 )
@@ -41,8 +42,8 @@ func (c *Client) User(uID string) EndpointUser {
 	return EndpointUser{e2}
 }
 
-func (e EndpointUser) Get() (u *ModelUser, err error) {
-	return u, e.doMethod("GET", nil, &u)
+func (e EndpointUser) Get(ctx context.Context) (u *ModelUser, err error) {
+	return u, e.doMethod(ctx, "GET", nil, &u)
 }
 
 type EndpointMe struct {
@@ -54,8 +55,8 @@ func (c *Client) Me() EndpointMe {
 	return EndpointMe{e2}
 }
 
-func (e EndpointMe) Get() (u *ModelUser, err error) {
-	return u, e.doMethod("GET", nil, &u)
+func (e EndpointMe) Get(ctx context.Context) (u *ModelUser, err error) {
+	return u, e.doMethod(ctx, "GET", nil, &u)
 }
 
 type ParamsMeModify struct {
@@ -63,8 +64,8 @@ type ParamsMeModify struct {
 	Avatar   string `json:"avatar"`
 }
 
-func (e EndpointMe) Modify(params *ParamsMeModify) (u *ModelUser, err error) {
-	return u, e.doMethod("PATCH", params, &u)
+func (e EndpointMe) Modify(ctx context.Context, params *ParamsMeModify) (u *ModelUser, err error) {
+	return u, e.doMethod(ctx, "PATCH", params, &u)
 }
 
 type EndpointMeGuilds struct {
@@ -96,8 +97,8 @@ func (params *ParamsMeGuildsGet) rawQuery() string {
 	return v.Encode()
 }
 
-func (e EndpointMeGuilds) Get(params *ParamsMeGuildsGet) (guilds []*ModelUserGuild, err error) {
-	req := e.newRequest("GET", nil)
+func (e EndpointMeGuilds) Get(ctx context.Context, params *ParamsMeGuildsGet) (guilds []*ModelUserGuild, err error) {
+	req := e.newRequest(ctx, "GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
 	}
@@ -113,8 +114,8 @@ func (e EndpointMe) Guild(gID string) EndpointMeGuild {
 	return EndpointMeGuild{e2}
 }
 
-func (e EndpointMeGuild) Leave() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointMeGuild) Leave(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
 type EndpointMeDMChannels struct {
@@ -126,16 +127,16 @@ func (e EndpointMe) DMChannels() EndpointMeDMChannels {
 	return EndpointMeDMChannels{e2}
 }
 
-func (e EndpointMeDMChannels) Get() (dmChannels *[]ModelChannel, err error) {
-	return dmChannels, e.doMethod("GET", nil, &dmChannels)
+func (e EndpointMeDMChannels) Get(ctx context.Context) (dmChannels *[]ModelChannel, err error) {
+	return dmChannels, e.doMethod(ctx, "GET", nil, &dmChannels)
 }
 
 type ParamsDMChannelsCreate struct {
 	RecipientID string `json:"recipient_id"`
 }
 
-func (e EndpointMeDMChannels) Create(params *ParamsDMChannelsCreate) (ch *ModelChannel, err error) {
-	return ch, e.doMethod("POST", params, &ch)
+func (e EndpointMeDMChannels) Create(ctx context.Context, params *ParamsDMChannelsCreate) (ch *ModelChannel, err error) {
+	return ch, e.doMethod(ctx, "POST", params, &ch)
 }
 
 type ParamsDmChannelsCreateGroup struct {
@@ -143,8 +144,8 @@ type ParamsDmChannelsCreateGroup struct {
 	Nicks        map[string]string `json:"nicks"`
 }
 
-func (e EndpointMeDMChannels) CreateGroup(params *ParamsDmChannelsCreateGroup) (ch *ModelChannel, err error) {
-	return ch, e.doMethod("POST", params, &ch)
+func (e EndpointMeDMChannels) CreateGroup(ctx context.Context, params *ParamsDmChannelsCreateGroup) (ch *ModelChannel, err error) {
+	return ch, e.doMethod(ctx, "POST", params, &ch)
 }
 
 type EndpointMeConnections struct {
@@ -156,6 +157,6 @@ func (e EndpointMe) Connections() EndpointMeConnections {
 	return EndpointMeConnections{e2}
 }
 
-func (e EndpointMeConnections) Get() (connections []*ModelConnection, err error) {
-	return connections, e.doMethod("GET", nil, &connections)
+func (e EndpointMeConnections) Get(ctx context.Context) (connections []*ModelConnection, err error) {
+	return connections, e.doMethod(ctx, "GET", nil, &connections)
 }

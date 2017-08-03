@@ -1,6 +1,7 @@
 package discgo
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"testing"
@@ -16,7 +17,7 @@ func init() {
 
 func TestClient_APIError(t *testing.T) {
 	c := NewClient()
-	_, err := c.Me().Connections().Get()
+	_, err := c.Me().Connections().Get(context.Background())
 	if err == nil {
 		t.Fatal("expected non nil error")
 	}

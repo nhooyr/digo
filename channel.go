@@ -13,6 +13,8 @@ import (
 	"io"
 	"mime/multipart"
 
+	"context"
+
 	"gopkg.in/guregu/null.v3"
 )
 
@@ -194,8 +196,8 @@ func (c *Client) Channel(cID string) EndpointChannel {
 	return EndpointChannel{e2}
 }
 
-func (e EndpointChannel) Get() (ch *ModelChannel, err error) {
-	return ch, e.doMethod("GET", nil, &ch)
+func (e EndpointChannel) Get(ctx context.Context) (ch *ModelChannel, err error) {
+	return ch, e.doMethod(ctx, "GET", nil, &ch)
 }
 
 type ParamsChannelModify struct {
@@ -206,12 +208,12 @@ type ParamsChannelModify struct {
 	UserLimit null.Int    `json:"user_limit"`
 }
 
-func (e EndpointChannel) Modify(params *ParamsChannelModify) (ch *ModelChannel, err error) {
-	return ch, e.doMethod("PATCH", params, &ch)
+func (e EndpointChannel) Modify(ctx context.Context, params *ParamsChannelModify) (ch *ModelChannel, err error) {
+	return ch, e.doMethod(ctx, "PATCH", params, &ch)
 }
 
-func (e EndpointChannel) Delete() (ch *ModelChannel, err error) {
-	return ch, e.doMethod("DELETE", nil, &ch)
+func (e EndpointChannel) Delete(ctx context.Context) (ch *ModelChannel, err error) {
+	return ch, e.doMethod(ctx, "DELETE", nil, &ch)
 }
 
 type EndpointMessages struct {
@@ -226,9 +228,9 @@ type ParamsMessagesBulkDelete struct {
 	Messages []string `json:"messages"`
 }
 
-func (e EndpointMessages) BulkDelete(params *ParamsMessagesBulkDelete) error {
+func (e EndpointMessages) BulkDelete(ctx context.Context, params *ParamsMessagesBulkDelete) error {
 	e2 := e.appendMajor("bulk-delete")
-	return e2.doMethod("POST", params, nil)
+	return e2.doMethod(ctx, "POST", params, nil)
 }
 
 type ParamsMessagesGet struct {
@@ -255,8 +257,8 @@ func (params *ParamsMessagesGet) rawQuery() string {
 	return v.Encode()
 }
 
-func (e EndpointMessages) Get(params *ParamsMessagesGet) (messages []*ModelMessage, err error) {
-	req := e.newRequest("GET", nil)
+func (e EndpointMessages) Get(ctx context.Context, params *ParamsMessagesGet) (messages []*ModelMessage, err error) {
+	req := e.newRequest(ctx, "GET", nil)
 	if params != nil {
 		req.URL.RawQuery = params.rawQuery()
 	}
@@ -276,7 +278,7 @@ type ParamsFile struct {
 	Content io.Reader
 }
 
-func (e EndpointMessages) Create(params *ParamsMessageCreate) (m *ModelMessage, err error) {
+func (e EndpointMessages) Create(ctx context.Context, params *ParamsMessageCreate) (m *ModelMessage, err error) {
 	reqBody := &bytes.Buffer{}
 	reqBodyWriter := multipart.NewWriter(reqBody)
 
@@ -310,7 +312,7 @@ func (e EndpointMessages) Create(params *ParamsMessageCreate) (m *ModelMessage, 
 		return nil, err
 	}
 
-	req := e.newRequest("POST", reqBody)
+	req := e.newRequest(ctx, "POST", reqBody)
 	req.Header.Set("Content-Type", reqBodyWriter.FormDataContentType())
 	return m, e.do(req, &m)
 }
@@ -324,8 +326,8 @@ func (e EndpointChannel) Message(mID string) EndpointMessage {
 	return EndpointMessage{e2}
 }
 
-func (e EndpointMessage) Get() (m *ModelMessage, err error) {
-	return m, e.doMethod("GET", nil, &m)
+func (e EndpointMessage) Get(ctx context.Context) (m *ModelMessage, err error) {
+	return m, e.doMethod(ctx, "GET", nil, &m)
 }
 
 type ParamsMessageEdit struct {
@@ -334,12 +336,12 @@ type ParamsMessageEdit struct {
 	Embed   *ModelEmbed `json:"embed,omitempty"`
 }
 
-func (e EndpointMessage) Edit(params *ParamsMessageEdit) (m *ModelMessage, err error) {
-	return m, e.doMethod("PATCH", params, &m)
+func (e EndpointMessage) Edit(ctx context.Context, params *ParamsMessageEdit) (m *ModelMessage, err error) {
+	return m, e.doMethod(ctx, "PATCH", params, &m)
 }
 
-func (e EndpointMessage) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointMessage) Delete(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
 // TODO not a fan of this API design, revisit later maybe
@@ -351,18 +353,18 @@ func (e EndpointMessage) Reactions() EndpointReactions {
 	return EndpointReactions{e.appendMajor("reactions")}
 }
 
-func (e EndpointReactions) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointReactions) Delete(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
-func (e EndpointReactions) Get(emoji string) (users []*ModelUser, err error) {
+func (e EndpointReactions) Get(ctx context.Context, emoji string) (users []*ModelUser, err error) {
 	e2 := e.appendMinor(emoji)
-	return users, e2.doMethod("GET", nil, &users)
+	return users, e2.doMethod(ctx, "GET", nil, &users)
 }
 
-func (e EndpointReactions) Create(emoji string) error {
+func (e EndpointReactions) Create(ctx context.Context, emoji string) error {
 	e2 := e.appendMinor(emoji).appendMinor("@me")
-	return e2.doMethod("PUT", nil, nil)
+	return e2.doMethod(ctx, "PUT", nil, nil)
 }
 
 type EndpointReaction struct {
@@ -375,8 +377,8 @@ func (e EndpointMessage) Reaction(emoji, uID string) EndpointReaction {
 	return EndpointReaction{e2}
 }
 
-func (e EndpointReaction) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointReaction) Delete(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
 type EndpointPermissionOverwrite struct {
@@ -394,12 +396,12 @@ type ParamsPermissionOverwriteEdit struct {
 	Type  string `json:"type"`
 }
 
-func (e EndpointPermissionOverwrite) Edit(params *ParamsPermissionOverwriteEdit) error {
-	return e.doMethod("PUT", params, nil)
+func (e EndpointPermissionOverwrite) Edit(ctx context.Context, params *ParamsPermissionOverwriteEdit) error {
+	return e.doMethod(ctx, "PUT", params, nil)
 }
 
-func (e EndpointPermissionOverwrite) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointPermissionOverwrite) Delete(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
 // TODO move somewhere where it can be shared between guild.go and channel.go
@@ -412,8 +414,8 @@ func (e EndpointChannel) Invites() EndpointInvites {
 	return EndpointInvites{e2}
 }
 
-func (e EndpointInvites) Get() (invites []*ModelInvite, err error) {
-	return invites, e.doMethod("GET", nil, &invites)
+func (e EndpointInvites) Get(ctx context.Context) (invites []*ModelInvite, err error) {
+	return invites, e.doMethod(ctx, "GET", nil, &invites)
 }
 
 type ParamsInviteCreate struct {
@@ -423,8 +425,8 @@ type ParamsInviteCreate struct {
 	Unique    bool     `json:"unique,omitempty"`
 }
 
-func (e EndpointInvites) Create(params *ParamsInviteCreate) (invite *ModelInvite, err error) {
-	return invite, e.doMethod("POST", params, &invite)
+func (e EndpointInvites) Create(ctx context.Context, params *ParamsInviteCreate) (invite *ModelInvite, err error) {
+	return invite, e.doMethod(ctx, "POST", params, &invite)
 }
 
 type EndpointTypingIndicator struct {
@@ -436,8 +438,8 @@ func (e EndpointChannel) TypingIndicator() EndpointTypingIndicator {
 	return EndpointTypingIndicator{e2}
 }
 
-func (e EndpointTypingIndicator) Trigger() error {
-	return e.doMethod("POST", nil, nil)
+func (e EndpointTypingIndicator) Trigger(ctx context.Context) error {
+	return e.doMethod(ctx, "POST", nil, nil)
 }
 
 type EndpointPins struct {
@@ -449,8 +451,8 @@ func (e EndpointChannel) Pins() EndpointPins {
 	return EndpointPins{e2}
 }
 
-func (e EndpointPins) Get() (messages []*ModelMessage, err error) {
-	return messages, e.doMethod("GET", nil, &messages)
+func (e EndpointPins) Get(ctx context.Context) (messages []*ModelMessage, err error) {
+	return messages, e.doMethod(ctx, "GET", nil, &messages)
 }
 
 type EndpointPin struct {
@@ -462,12 +464,12 @@ func (e EndpointChannel) Pin(mID string) EndpointPin {
 	return EndpointPin{e2}
 }
 
-func (e EndpointPin) Add() error {
-	return e.doMethod("PUT", nil, nil)
+func (e EndpointPin) Add(ctx context.Context) error {
+	return e.doMethod(ctx, "PUT", nil, nil)
 }
 
-func (e EndpointPin) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointPin) Delete(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }
 
 type EndpointRecipient struct {
@@ -484,10 +486,10 @@ type ParamsRecipientAdd struct {
 	Nick        string `json:"nick"`
 }
 
-func (e EndpointRecipient) Add(params *ParamsRecipientAdd) error {
-	return e.doMethod("PUT", params, nil)
+func (e EndpointRecipient) Add(ctx context.Context, params *ParamsRecipientAdd) error {
+	return e.doMethod(ctx, "PUT", params, nil)
 }
 
-func (e EndpointRecipient) Delete() error {
-	return e.doMethod("DELETE", nil, nil)
+func (e EndpointRecipient) Delete(ctx context.Context) error {
+	return e.doMethod(ctx, "DELETE", nil, nil)
 }

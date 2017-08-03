@@ -5,7 +5,7 @@ import (
 )
 
 func EndpointTestGateway_Get(t *testing.T) {
-	e := client.gateway()
+	e := client.Gateway()
 	url, err := e.get()
 	if err != nil {
 		t.Fatal(err)

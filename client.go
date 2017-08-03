@@ -9,6 +9,7 @@ import (
 
 	"bytes"
 
+	"context"
 	"time"
 )
 
@@ -41,14 +42,14 @@ func NewClient() *Client {
 	return c
 }
 
-func (c *Client) newRequest(method, url string, body io.Reader) *http.Request {
+func (c *Client) newRequest(ctx context.Context, method, url string, body io.Reader) *http.Request {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		panic(err)
 	}
 	req.Header.Set("Authorization", "Bot "+c.Token)
 	req.Header.Set("User-Agent", c.UserAgent)
-	return req
+	return req.WithContext(ctx)
 }
 
 func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
@@ -144,17 +145,17 @@ func (e *endpoint) appendMinor(element string) *endpoint {
 	return e.append(element, "*")
 }
 
-func (e *endpoint) newRequest(method string, reqBody io.Reader) *http.Request {
-	return e.c.newRequest(method, e.url, reqBody)
+func (e *endpoint) newRequest(ctx context.Context, method string, reqBody io.Reader) *http.Request {
+	return e.c.newRequest(ctx, method, e.url, reqBody)
 }
 
 // Be careful with this method, it panics if json.Marshal errors.
-func (e *endpoint) newRequestJSON(method string, v interface{}) *http.Request {
+func (e *endpoint) newRequestJSON(ctx context.Context, method string, v interface{}) *http.Request {
 	body, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
-	req := e.c.newRequest(method, e.url, bytes.NewBuffer(body))
+	req := e.c.newRequest(ctx, method, e.url, bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	return req
 }
@@ -167,12 +168,12 @@ func (e *endpoint) do(req *http.Request, v interface{}) error {
 	return json.Unmarshal(respBody, v)
 }
 
-func (e *endpoint) doMethod(method string, v1 interface{}, v2 interface{}) error {
+func (e *endpoint) doMethod(ctx context.Context, method string, v1 interface{}, v2 interface{}) error {
 	var req *http.Request
 	if v1 == nil {
-		req = e.newRequest(method, nil)
+		req = e.newRequest(ctx, method, nil)
 	} else {
-		req = e.newRequestJSON(method, v1)
+		req = e.newRequestJSON(ctx, method, v1)
 	}
 	return e.do(req, v2)
 }
