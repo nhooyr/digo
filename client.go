@@ -13,25 +13,21 @@ import (
 	"time"
 )
 
-const Version = "0.1.0"
-
-var defaultUserAgent = fmt.Sprintf("DiscordBot (https://github.com/nhooyr/discgo, %v)", Version)
-
 type Client struct {
 	Token      string
-	UserAgent  string
 	HttpClient *http.Client
 
 	rl *rateLimiter
 	e  *endpoint
 }
 
-const apiVersion = "6"
-const endpointAPI = "https://discordapp.com/api/v" + apiVersion
+const (
+	apiVersion  = "6"
+	endpointAPI = "https://discordapp.com/api/v" + apiVersion
+)
 
 func NewClient() *Client {
 	c := &Client{
-		UserAgent:  defaultUserAgent,
 		HttpClient: &http.Client{Timeout: 20 * time.Second},
 		rl:         newRateLimiter(),
 	}
@@ -42,13 +38,17 @@ func NewClient() *Client {
 	return c
 }
 
+const Version = "0.1.0"
+
+var userAgent = fmt.Sprintf("DiscordBot (https://github.com/nhooyr/discgo, %v)", Version)
+
 func (c *Client) newRequest(ctx context.Context, method, url string, body io.Reader) *http.Request {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		panic(err)
 	}
 	req.Header.Set("Authorization", "Bot "+c.Token)
-	req.Header.Set("User-Agent", c.UserAgent)
+	req.Header.Set("User-Agent", userAgent)
 	return req.WithContext(ctx)
 }
 
@@ -56,7 +56,7 @@ func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
 	return c.doN(req, rateLimitPath, 0)
 }
 
-// TODO should it be the library'g purpose to retry?
+// TODO exponential backoff maybe? or too much in this library? not sure.
 func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
 	prl := c.rl.getPathRateLimiter(rateLimitPath)
 	prl.lock()

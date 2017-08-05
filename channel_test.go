@@ -24,7 +24,7 @@ func TestClient_GetChannelMessages(t *testing.T) {
 	t.Log(messages[0].Content)
 }
 
-func TestClient_GetChannelMessage(t *testing.T)  {
+func TestClient_GetChannelMessage(t *testing.T) {
 	m, err := client.Channel(cID).Message(mID).Get(context.Background())
 	if err != nil {
 		t.Fatal(err)

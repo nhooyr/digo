@@ -28,7 +28,7 @@ func (c *Client) Gateway() EndpointGateway {
 	return EndpointGateway{e2}
 }
 
-func (e EndpointGateway) get() (url string, err error) {
+func (e EndpointGateway) Get() (url string, err error) {
 	var urlStruct struct {
 		URL string `json:"url"`
 	}
@@ -55,22 +55,17 @@ func (e EndpointGatewayBot) Get(ctx context.Context) (resp *ModelGatewayBotResp,
 }
 
 type EventHandler interface {
-	Handle(ctx context.Context, conn *Conn, e interface{}) error
+	Handle(ctx context.Context, e interface{}) error
 }
 
 type Conn struct {
-	Client *Client
-	State  *State
-
+	token        string
+	gatewayURL   string
 	eventHandler EventHandler
 	errorHandler func(err error)
 	logf         func(format string, v ...interface{})
 
-	gatewayURL string
-	sessionID  string
-
-	closeChan chan struct{}
-	wg        sync.WaitGroup
+	sessionID string
 
 	shard        *[2]int
 	lastIdentify time.Time
@@ -78,6 +73,8 @@ type Conn struct {
 	resuming     bool
 
 	reconnectChan chan struct{}
+	closeChan     chan struct{}
+	wg            sync.WaitGroup
 
 	// TODO use other websocket package, it's better for my usecase.
 	wsConn    *websocket.Conn
@@ -89,17 +86,20 @@ type Conn struct {
 }
 
 type DialConfig struct {
-	Client       *Client
+	GatewayURL   string
+	Token        string
 	EventHandler EventHandler
-	// May be called concurrently.
+
+	// These may be called concurrently.
 	ErrorHandler func(err error)
-	// May be called concurrently.
-	Logf func(format string, v ...interface{})
+	Logf         func(format string, v ...interface{})
 
 	Shard       int
 	ShardsCount int
 }
 
+// NewDialConfig returns a new *DialConfig with sane defaults.
+// TODO I don't like this because it's not obvious that GatewayURL and Token are required. Hmm.
 func NewDialConfig() *DialConfig {
 	return &DialConfig{
 		ErrorHandler: func(err error) {
@@ -108,23 +108,19 @@ func NewDialConfig() *DialConfig {
 		Logf: func(format string, v ...interface{}) {
 			log.Printf(format, v...)
 		},
-		EventHandler: EventHandlerFunc(func(ctx context.Context, conn *Conn, e interface{}) error {
-			return nil
-		}),
 	}
 }
 
-type EventHandlerFunc func(ctx context.Context, conn *Conn, e interface{}) error
+type EventHandlerFunc func(ctx context.Context, e interface{}) error
 
-func (h EventHandlerFunc) Handle(ctx context.Context, conn *Conn, e interface{}) error {
-	return h(ctx, conn, e)
+func (h EventHandlerFunc) Handle(ctx context.Context, e interface{}) error {
+	return h(ctx, e)
 }
 
 func Dial(config *DialConfig) (*Conn, error) {
 	c := &Conn{
-		State: new(State),
-
-		Client:       config.Client,
+		token:        config.Token,
+		gatewayURL:   config.GatewayURL + "?v=" + apiVersion + "&encoding=json",
 		eventHandler: config.EventHandler,
 		errorHandler: config.ErrorHandler,
 		logf:         config.Logf,
@@ -152,15 +148,6 @@ func (c *Conn) dial() (err error) {
 	c.heartbeatAcknowledged = true
 	c.lastIdentify = time.Time{}
 
-	if c.gatewayURL == "" {
-		// TODO hardcoding this means we cannot use the bot gateway endpoint that returns the # of shards to use.
-		c.gatewayURL, err = c.Client.Gateway().get()
-		if err != nil {
-			return err
-		}
-		c.gatewayURL += "?v=" + apiVersion + "&encoding=json"
-	}
-
 	// TODO Need to set read deadline for hello packet and I also need to set write deadlines.
 	// TODO also max message
 	c.wsConn, _, err = websocket.DefaultDialer.Dial(c.gatewayURL, nil)
@@ -182,7 +169,7 @@ func (c *Conn) manager() {
 		c.readLoop(ctx)
 	})
 
-	if c.State.sessionID == "" {
+	if c.sessionID == "" {
 		c.identify(ctx)
 	} else {
 		c.resume(ctx)
@@ -190,6 +177,8 @@ func (c *Conn) manager() {
 
 	select {
 	case <-c.reconnectChan:
+		c.logf("restarting")
+
 		cancelFn()
 		c.wg.Wait()
 
@@ -198,6 +187,8 @@ func (c *Conn) manager() {
 			c.log(err)
 		}
 	case <-c.closeChan:
+		c.logf("exiting")
+
 		cancelFn()
 		c.wg.Wait()
 
@@ -206,7 +197,7 @@ func (c *Conn) manager() {
 }
 
 const (
-	operationDispatch = iota
+	operationDispatch            = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
@@ -312,10 +303,11 @@ func (c *Conn) identify(ctx context.Context) {
 	p := &sentPayload{
 		Operation: operationIdentify,
 		Data: dataOpIdentify{
-			Token: c.Client.Token,
+			Token: c.token,
 			Properties: identifyProperties{
 				OS:      runtime.GOOS,
-				Browser: c.Client.UserAgent,
+				Browser: userAgent,
+				Device:  userAgent,
 			},
 			Compress:       true,
 			LargeThreshold: 250,
@@ -339,8 +331,8 @@ func (c *Conn) resume(ctx context.Context) {
 	p := &sentPayload{
 		Operation: operationResume,
 		Data: dataOpResume{
-			Token:     c.Client.Token,
-			SessionID: c.State.sessionID,
+			Token:     c.token,
+			SessionID: c.sessionID,
 			Seq:       c.sequenceNumber,
 		},
 	}
@@ -360,7 +352,7 @@ type receivedPayload struct {
 	Operation      int             `json:"op"`
 	Data           json.RawMessage `json:"d"`
 	SequenceNumber int             `json:"s"`
-	Type           string          `json:"t"`
+	Type           string          `json:"t,omitempty"` // omitempty for logging purposes
 }
 
 func (c *Conn) readLoop(ctx context.Context) {
@@ -379,13 +371,12 @@ func (c *Conn) readLoop(ctx context.Context) {
 			return
 		}
 
-		c.log(p.Operation)
-		if p.Type != "" {
-			c.log(p.Type)
+		// TODO maybe make readPayload return JSON bytes too?
+		b, err := json.MarshalIndent(p, "", "    ")
+		if err != nil {
+			panic(err)
 		}
-		c.log(p.SequenceNumber)
-		c.logf("%s", p.Data)
-		c.log("\n")
+		c.logf("%s", b)
 
 		err = c.onPayload(ctx, p)
 		if err != nil {
@@ -490,6 +481,19 @@ func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
 	return nil
 }
 
+func readEvent(p *receivedPayload) (interface{}, error) {
+	e, err := getEventStruct(p.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(p.Data, &e)
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
 func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
 	c.ready = true
 	c.resuming = false
@@ -498,7 +502,7 @@ func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
 	c.sequenceNumber = p.SequenceNumber
 	c.heartbeatMu.Unlock()
 
-	e, err := getEventStruct(p.Type)
+	e, err := readEvent(p)
 	if err != nil {
 		return &EventHandlerError{
 			EventName: p.Type,
@@ -506,21 +510,16 @@ func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
 		}
 	}
 
-	err = json.Unmarshal(p.Data, &e)
-	if err != nil {
-		return &EventHandlerError{
-			EventName: p.Type,
-			Err:       err,
-		}
+	if e, ok := e.(*EventReady); ok {
+		c.sessionID = e.SessionID
 	}
 
-	err = c.State.handle(ctx, c, e)
+	if c.eventHandler == nil {
+		return nil
+	}
+
+	err = c.eventHandler.Handle(ctx, e)
 	if err != nil {
-		if err == errHandled {
-			return nil
-		}
-		// State has been corrupted somehow. E.g. a message created for a non existing guild.
-		// Or a reaction for a non existing message. Something went wrong. We should reconnect.
 		return &EventHandlerError{
 			EventName: p.Type,
 			Event:     e,
@@ -528,18 +527,6 @@ func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
 		}
 	}
 
-	// TODO i don't really like the way this works.
-	go func() {
-		err = c.eventHandler.Handle(ctx, c, e)
-		if err != nil {
-			err := &EventHandlerError{
-				EventName: p.Type,
-				Event:     e,
-				Err:       err,
-			}
-			c.errorHandler(err)
-		}
-	}()
 	return nil
 }
 

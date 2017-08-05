@@ -6,11 +6,13 @@ import (
 	"fmt"
 )
 
+// TODO expose all events except those replaced by state events.
+
 type EventReady struct {
 	V               int                 `json:"v"`
 	User            *ModelUser          `json:"user"`
 	PrivateChannels []*ModelChannel     `json:"private_channels"`
-	Guilds          []*EventGuildCreate `json:"guilds"`
+	Guilds          []*eventGuildCreate `json:"guilds"`
 	SessionID       string              `json:"session_id"`
 	Trace           []string            `json:"_trace"`
 }
@@ -19,19 +21,19 @@ type eventResumed struct {
 	Trace []string `json:"_trace"`
 }
 
-type EventChannelCreate struct {
+type eventChannelCreate struct {
 	ModelChannel
 }
 
-type EventChannelUpdate struct {
+type eventChannelUpdate struct {
 	ModelChannel
 }
 
-type EventChannelDelete struct {
+type eventChannelDelete struct {
 	ModelChannel
 }
 
-type EventGuildCreate struct {
+type eventGuildCreate struct {
 	ModelGuild
 	Large       bool                `json:"large"`
 	Unavailable bool                `json:"unavailable"`
@@ -48,11 +50,11 @@ type ModelPresence struct {
 	Status string     `json:"status"`
 }
 
-type EventGuildUpdate struct {
+type eventGuildUpdate struct {
 	ModelGuild
 }
 
-type EventGuildDelete struct {
+type eventGuildDelete struct {
 	ID          string `json:"id"`
 	Unavailable bool   `json:"unavailable"`
 }
@@ -67,7 +69,7 @@ type EventGuildBanRemove struct {
 	GuildID string `json:"guild_id"`
 }
 
-type EventGuildEmojisUpdate struct {
+type eventGuildEmojisUpdate struct {
 	GuildID string             `json:"guild_id"`
 	Emojis  []*ModelGuildEmoji `json:"emojis"`
 }
@@ -76,39 +78,39 @@ type EventGuildIntegrationsUpdate struct {
 	GuildID string `json:"guild_id"`
 }
 
-type EventGuildMemberAdd struct {
+type eventGuildMemberAdd struct {
 	ModelGuildMember
 	GuildID string `json:"guild_id"`
 }
 
-type EventGuildMemberRemove struct {
+type eventGuildMemberRemove struct {
 	User    ModelUser `json:"user"`
 	GuildID string    `json:"guild_id"`
 }
 
-type EventGuildMemberUpdate struct {
+type eventGuildMemberUpdate struct {
 	GuildID string    `json:"guild_id"`
 	Roles   []string  `json:"roles"`
 	User    ModelUser `json:"user"`
 	Nick    string    `json:"nick"`
 }
 
-type EventGuildMembersChunk struct {
+type eventGuildMembersChunk struct {
 	GuildID string              `json:"guild_id"`
 	Members []*ModelGuildMember `json:"members"`
 }
 
-type EventGuildRoleCreate struct {
+type eventGuildRoleCreate struct {
 	GuildID string    `json:"guild_id"`
 	Role    ModelRole `json:"role"`
 }
 
-type EventGuildRoleUpdate struct {
+type eventGuildRoleUpdate struct {
 	GuildID string    `json:"guild_id"`
 	Role    ModelRole `json:"role"`
 }
 
-type EventGuildRoleDelete struct {
+type eventGuildRoleDelete struct {
 	GuildID string    `json:"guild_id"`
 	Role    ModelRole `json:"role"`
 }
@@ -222,39 +224,39 @@ func getEventStruct(eventType string) (interface{}, error) {
 	case "RESUMED":
 		return new(eventResumed), nil
 	case "CHANNEL_CREATE":
-		return new(EventChannelCreate), nil
+		return new(eventChannelCreate), nil
 	case "CHANNEL_UPDATE":
-		return new(EventChannelUpdate), nil
+		return new(eventChannelUpdate), nil
 	case "CHANNEL_DELETE":
-		return new(EventChannelDelete), nil
+		return new(eventChannelDelete), nil
 	case "GUILD_CREATE":
-		return new(EventGuildCreate), nil
+		return new(eventGuildCreate), nil
 	case "GUILD_UPDATE":
-		return new(EventGuildUpdate), nil
+		return new(eventGuildUpdate), nil
 	case "GUILD_DELETE":
-		return new(EventGuildDelete), nil
+		return new(eventGuildDelete), nil
 	case "GUILD_BAN_ADD":
 		return new(EventGuildBanAdd), nil
 	case "GUILD_BAN_REMOVE":
 		return new(EventGuildBanRemove), nil
 	case "GUILD_EMOJIS_UPDATE":
-		return new(EventGuildEmojisUpdate), nil
+		return new(eventGuildEmojisUpdate), nil
 	case "GUILD_INTEGRATIONS_UPDATE":
 		return new(EventGuildIntegrationsUpdate), nil
 	case "GUILD_MEMBER_ADD":
-		return new(EventGuildMemberAdd), nil
+		return new(eventGuildMemberAdd), nil
 	case "GUILD_MEMBER_REMOVE":
-		return new(EventGuildMemberRemove), nil
+		return new(eventGuildMemberRemove), nil
 	case "GUILD_MEMBER_UPDATE":
-		return new(EventGuildMemberUpdate), nil
+		return new(eventGuildMemberUpdate), nil
 	case "GUILD_MEMBERS_CHUNK":
-		return new(EventGuildMembersChunk), nil
+		return new(eventGuildMembersChunk), nil
 	case "GUILD_ROLE_CREATE":
-		return new(EventGuildRoleCreate), nil
+		return new(eventGuildRoleCreate), nil
 	case "GUILD_ROLE_UPDATE":
-		return new(EventGuildRoleUpdate), nil
+		return new(eventGuildRoleUpdate), nil
 	case "GUILD_ROLE_DELETE":
-		return new(EventGuildRoleDelete), nil
+		return new(eventGuildRoleDelete), nil
 	case "MESSAGE_CREATE":
 		return new(EventMessageCreate), nil
 	case "MESSAGE_UPDATE":

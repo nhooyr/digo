@@ -3,6 +3,8 @@ package discgo
 import (
 	"context"
 	"time"
+
+	"gopkg.in/guregu/null.v3"
 )
 
 type ModelInvite struct {
@@ -31,6 +33,29 @@ type ModelInviteChannel struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Type int    `json:"type"`
+}
+type EndpointInvites struct {
+	*endpoint
+}
+
+func (e EndpointChannel) Invites() EndpointInvites {
+	e2 := e.appendMajor("invites")
+	return EndpointInvites{e2}
+}
+
+func (e EndpointInvites) Get(ctx context.Context) (invites []*ModelInvite, err error) {
+	return invites, e.doMethod(ctx, "GET", nil, &invites)
+}
+
+type ParamsInviteCreate struct {
+	MaxAge    null.Int `json:"max_age"`
+	MaxUses   null.Int `json:"max_uses"`
+	Temporary bool     `json:"temporary,omitempty"`
+	Unique    bool     `json:"unique,omitempty"`
+}
+
+func (e EndpointInvites) Create(ctx context.Context, params *ParamsInviteCreate) (invite *ModelInvite, err error) {
+	return invite, e.doMethod(ctx, "POST", params, &invite)
 }
 
 type EndpointInvite struct {

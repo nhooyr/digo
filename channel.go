@@ -166,24 +166,23 @@ type ModelAttachment struct {
 	Width    int    `json:"width"`
 }
 
-// TODO rename all of these
-func UserMention(uID string) string {
+func MentionUser(uID string) string {
 	return fmt.Sprintf("<@%v>", uID)
 }
 
-func UserNicknameMention(uID string) string {
+func MentionNickname(uID string) string {
 	return fmt.Sprintf("<@!%v>", uID)
 }
 
-func ChannelMention(cID string) string {
+func MentionChannel(cID string) string {
 	return fmt.Sprintf("<#%v>", cID)
 }
 
-func RoleMention(roleID string) string {
+func MentionRole(roleID string) string {
 	return fmt.Sprintf("<@&%v>", roleID)
 }
 
-func CustomEmojiMessage(emojiName, emojiID string) string {
+func MentionEmoji(emojiName, emojiID string) string {
 	return fmt.Sprintf("<:%v:%v>", emojiName, emojiID)
 }
 
@@ -402,31 +401,6 @@ func (e EndpointPermissionOverwrite) Edit(ctx context.Context, params *ParamsPer
 
 func (e EndpointPermissionOverwrite) Delete(ctx context.Context) error {
 	return e.doMethod(ctx, "DELETE", nil, nil)
-}
-
-// TODO move somewhere where it can be shared between guild.go and channel.go
-type EndpointInvites struct {
-	*endpoint
-}
-
-func (e EndpointChannel) Invites() EndpointInvites {
-	e2 := e.appendMajor("invites")
-	return EndpointInvites{e2}
-}
-
-func (e EndpointInvites) Get(ctx context.Context) (invites []*ModelInvite, err error) {
-	return invites, e.doMethod(ctx, "GET", nil, &invites)
-}
-
-type ParamsInviteCreate struct {
-	MaxAge    null.Int `json:"max_age"`
-	MaxUses   null.Int `json:"max_uses"`
-	Temporary bool     `json:"temporary,omitempty"`
-	Unique    bool     `json:"unique,omitempty"`
-}
-
-func (e EndpointInvites) Create(ctx context.Context, params *ParamsInviteCreate) (invite *ModelInvite, err error) {
-	return invite, e.doMethod(ctx, "POST", params, &invite)
 }
 
 type EndpointTypingIndicator struct {
