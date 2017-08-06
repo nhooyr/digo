@@ -6,13 +6,11 @@ import (
 	"fmt"
 )
 
-// TODO expose all events except those replaced by state events.
-
 type EventReady struct {
 	V               int                 `json:"v"`
 	User            *ModelUser          `json:"user"`
 	PrivateChannels []*ModelChannel     `json:"private_channels"`
-	Guilds          []*eventGuildCreate `json:"guilds"`
+	Guilds          []*EventGuildCreate `json:"guilds"`
 	SessionID       string              `json:"session_id"`
 	Trace           []string            `json:"_trace"`
 }
@@ -21,19 +19,23 @@ type eventResumed struct {
 	Trace []string `json:"_trace"`
 }
 
-type eventChannelCreate struct {
+type EventChannelCreate struct {
 	ModelChannel
 }
 
-type eventChannelUpdate struct {
+type StateChannelCreate struct {
+	*StateChannel
+}
+
+type EventChannelUpdate struct {
 	ModelChannel
 }
 
-type eventChannelDelete struct {
+type EventChannelDelete struct {
 	ModelChannel
 }
 
-type eventGuildCreate struct {
+type EventGuildCreate struct {
 	ModelGuild
 	Large       bool                `json:"large"`
 	Unavailable bool                `json:"unavailable"`
@@ -50,11 +52,11 @@ type ModelPresence struct {
 	Status string     `json:"status"`
 }
 
-type eventGuildUpdate struct {
+type EventGuildUpdate struct {
 	ModelGuild
 }
 
-type eventGuildDelete struct {
+type EventGuildDelete struct {
 	ID          string `json:"id"`
 	Unavailable bool   `json:"unavailable"`
 }
@@ -69,7 +71,7 @@ type EventGuildBanRemove struct {
 	GuildID string `json:"guild_id"`
 }
 
-type eventGuildEmojisUpdate struct {
+type EventGuildEmojisUpdate struct {
 	GuildID string             `json:"guild_id"`
 	Emojis  []*ModelGuildEmoji `json:"emojis"`
 }
@@ -78,7 +80,7 @@ type EventGuildIntegrationsUpdate struct {
 	GuildID string `json:"guild_id"`
 }
 
-type eventGuildMemberAdd struct {
+type EventGuildMemberAdd struct {
 	ModelGuildMember
 	GuildID string `json:"guild_id"`
 }
@@ -224,27 +226,27 @@ func getEventStruct(eventType string) (interface{}, error) {
 	case "RESUMED":
 		return new(eventResumed), nil
 	case "CHANNEL_CREATE":
-		return new(eventChannelCreate), nil
+		return new(EventChannelCreate), nil
 	case "CHANNEL_UPDATE":
-		return new(eventChannelUpdate), nil
+		return new(EventChannelUpdate), nil
 	case "CHANNEL_DELETE":
-		return new(eventChannelDelete), nil
+		return new(EventChannelDelete), nil
 	case "GUILD_CREATE":
-		return new(eventGuildCreate), nil
+		return new(EventGuildCreate), nil
 	case "GUILD_UPDATE":
-		return new(eventGuildUpdate), nil
+		return new(EventGuildUpdate), nil
 	case "GUILD_DELETE":
-		return new(eventGuildDelete), nil
+		return new(EventGuildDelete), nil
 	case "GUILD_BAN_ADD":
 		return new(EventGuildBanAdd), nil
 	case "GUILD_BAN_REMOVE":
 		return new(EventGuildBanRemove), nil
 	case "GUILD_EMOJIS_UPDATE":
-		return new(eventGuildEmojisUpdate), nil
+		return new(EventGuildEmojisUpdate), nil
 	case "GUILD_INTEGRATIONS_UPDATE":
 		return new(EventGuildIntegrationsUpdate), nil
 	case "GUILD_MEMBER_ADD":
-		return new(eventGuildMemberAdd), nil
+		return new(EventGuildMemberAdd), nil
 	case "GUILD_MEMBER_REMOVE":
 		return new(eventGuildMemberRemove), nil
 	case "GUILD_MEMBER_UPDATE":

@@ -454,25 +454,25 @@ func (s *State) channel(cID string) (*StateChannel, bool) {
 	return sc, ok
 }
 
-func (s *State) handle(ctx context.Context, e interface{}) (err error) {
+func (s *State) Handle(ctx context.Context, e interface{}) (err error) {
 	switch e := e.(type) {
 	case *EventReady:
 		err = s.ready(ctx, e)
-	case *eventChannelCreate:
+	case *EventChannelCreate:
 		err = s.createChannel(ctx, e)
-	case *eventChannelUpdate:
+	case *EventChannelUpdate:
 		err = s.updateChannel(ctx, e)
-	case *eventChannelDelete:
+	case *EventChannelDelete:
 		err = s.deleteChannel(ctx, e)
-	case *eventGuildCreate:
+	case *EventGuildCreate:
 		err = s.createGuild(ctx, e)
-	case *eventGuildUpdate:
+	case *EventGuildUpdate:
 		err = s.updateGuild(ctx, e)
-	case *eventGuildDelete:
+	case *EventGuildDelete:
 		err = s.deleteGuild(ctx, e)
-	case *eventGuildEmojisUpdate:
+	case *EventGuildEmojisUpdate:
 		err = s.updateGuildEmojis(ctx, e)
-	case *eventGuildMemberAdd:
+	case *EventGuildMemberAdd:
 		err = s.addGuildMember(ctx, e)
 	case *eventGuildMemberRemove:
 		err = s.removeGuildMember(ctx, e)
@@ -526,11 +526,11 @@ func (s *State) ready(ctx context.Context, e *EventReady) error {
 	return nil
 }
 
-func (s *State) createChannel(ctx context.Context, e *eventChannelCreate) error {
+func (s *State) createChannel(ctx context.Context, e *EventChannelCreate) error {
 	return s.insertChannel(&e.ModelChannel)
 }
 
-func (s *State) updateChannel(ctx context.Context, e *eventChannelUpdate) error {
+func (s *State) updateChannel(ctx context.Context, e *EventChannelUpdate) error {
 	return s.insertChannel(&e.ModelChannel)
 }
 
@@ -573,7 +573,7 @@ func (s *State) insertChannel(c *ModelChannel) error {
 	return nil
 }
 
-func (s *State) deleteChannel(ctx context.Context, e *eventChannelDelete) error {
+func (s *State) deleteChannel(ctx context.Context, e *EventChannelDelete) error {
 	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
 		s.dmChannelsMu.Lock()
 		delete(s.dmChannels, e.ID)
@@ -596,7 +596,7 @@ func (s *State) deleteChannel(ctx context.Context, e *eventChannelDelete) error 
 	return nil
 }
 
-func (s *State) createGuild(ctx context.Context, e *eventGuildCreate) error {
+func (s *State) createGuild(ctx context.Context, e *EventGuildCreate) error {
 	sg := new(StateGuild)
 	sg.updateFromModel(&e.ModelGuild)
 
@@ -653,7 +653,7 @@ func (s *State) createGuild(ctx context.Context, e *eventGuildCreate) error {
 	return nil
 }
 
-func (s *State) updateGuild(ctx context.Context, e *eventGuildUpdate) error {
+func (s *State) updateGuild(ctx context.Context, e *EventGuildUpdate) error {
 	sg, ok := s.guilds[e.ID]
 	if !ok {
 		return errUnknownGuild
@@ -662,7 +662,7 @@ func (s *State) updateGuild(ctx context.Context, e *eventGuildUpdate) error {
 	return nil
 }
 
-func (s *State) deleteGuild(ctx context.Context, e *eventGuildDelete) error {
+func (s *State) deleteGuild(ctx context.Context, e *EventGuildDelete) error {
 	sg, ok := s.guilds[e.ID]
 	if !ok {
 		return errUnknownGuild
@@ -689,7 +689,7 @@ func (s *State) deleteGuild(ctx context.Context, e *eventGuildDelete) error {
 	return nil
 }
 
-func (s *State) updateGuildEmojis(ctx context.Context, e *eventGuildEmojisUpdate) error {
+func (s *State) updateGuildEmojis(ctx context.Context, e *EventGuildEmojisUpdate) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -700,7 +700,7 @@ func (s *State) updateGuildEmojis(ctx context.Context, e *eventGuildEmojisUpdate
 	return nil
 }
 
-func (s *State) addGuildMember(ctx context.Context, e *eventGuildMemberAdd) error {
+func (s *State) addGuildMember(ctx context.Context, e *EventGuildMemberAdd) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild

@@ -2,19 +2,16 @@ package discgo
 
 import (
 	"compress/zlib"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
+	"math/rand"
 	"net"
 	"runtime"
 	"sync"
 	"time"
-
-	"context"
-
-	"math/rand"
-
-	"log"
 
 	"github.com/gorilla/websocket"
 )
@@ -45,12 +42,12 @@ type EndpointGatewayBot struct {
 }
 
 // TODO kinda awkward
-type ModelGatewayBotResp struct {
+type ModelGatewayBotGetResponse struct {
 	URL    string `json:"url"`
 	Shards int    `json:"shards"`
 }
 
-func (e EndpointGatewayBot) Get(ctx context.Context) (resp *ModelGatewayBotResp, err error) {
+func (e EndpointGatewayBot) Get(ctx context.Context) (resp *ModelGatewayBotGetResponse, err error) {
 	return resp, e.doMethod(ctx, "GET", nil, &resp)
 }
 
@@ -85,6 +82,31 @@ type Conn struct {
 	sequenceNumber        int
 }
 
+func NewConn(config *DialConfig) *Conn {
+	c := &Conn{
+		token:        config.Token,
+		gatewayURL:   config.GatewayURL + "?v=" + apiVersion + "&encoding=json",
+		eventHandler: config.EventHandler,
+		errorHandler: config.ErrorHandler,
+		logf:         config.Logf,
+
+		closeChan:     make(chan struct{}),
+		reconnectChan: make(chan struct{}),
+		writeChan:     make(chan *sentPayload),
+		ready:         true,
+	}
+	if config.ShardsCount > 1 {
+		c.shard = &[2]int{config.Shard, config.ShardsCount}
+	}
+	return c
+}
+
+type EventHandlerFunc func(ctx context.Context, e interface{}) error
+
+func (h EventHandlerFunc) Handle(ctx context.Context, e interface{}) error {
+	return h(ctx, e)
+}
+
 type DialConfig struct {
 	GatewayURL   string
 	Token        string
@@ -111,29 +133,9 @@ func NewDialConfig() *DialConfig {
 	}
 }
 
-type EventHandlerFunc func(ctx context.Context, e interface{}) error
+func Dial(c *Conn, config *DialConfig) error {
 
-func (h EventHandlerFunc) Handle(ctx context.Context, e interface{}) error {
-	return h(ctx, e)
-}
-
-func Dial(config *DialConfig) (*Conn, error) {
-	c := &Conn{
-		token:        config.Token,
-		gatewayURL:   config.GatewayURL + "?v=" + apiVersion + "&encoding=json",
-		eventHandler: config.EventHandler,
-		errorHandler: config.ErrorHandler,
-		logf:         config.Logf,
-
-		closeChan:     make(chan struct{}),
-		reconnectChan: make(chan struct{}),
-		writeChan:     make(chan *sentPayload),
-		ready:         true,
-	}
-	if config.ShardsCount > 1 {
-		c.shard = &[2]int{config.Shard, config.ShardsCount}
-	}
-	return c, c.dial()
+	return c.dial()
 }
 
 // If it errors without receiving a operationDispatch payload, then
@@ -197,7 +199,7 @@ func (c *Conn) manager() {
 }
 
 const (
-	operationDispatch            = iota
+	operationDispatch = iota
 	operationHeartbeat
 	operationIdentify
 	operationStatusUpdate
