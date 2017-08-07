@@ -62,8 +62,8 @@ type EndpointInvite struct {
 	*endpoint
 }
 
-func (c *Client) Invite(inviteCode string) EndpointInvite {
-	e2 := c.e.appendMajor("invites").appendMinor(inviteCode)
+func (c *RESTClient) Invite(inviteCode string) EndpointInvite {
+	e2 := c.rootEndpoint().appendMajor("invites").appendMinor(inviteCode)
 	return EndpointInvite{e2}
 }
 

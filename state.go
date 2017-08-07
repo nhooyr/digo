@@ -1,7 +1,6 @@
 package discgo
 
 import (
-	"context"
 	"errors"
 	"sync"
 	"time"
@@ -405,6 +404,8 @@ var (
 
 // State stored from websocket events.
 type State struct {
+	sessionID string
+
 	// TODO event handlers send new transformed data further? E.g. not the raw events but StateGuild etc?
 	// TODO does the user update event only apply to the current user or all users?
 	userMu sync.RWMutex
@@ -454,49 +455,52 @@ func (s *State) channel(cID string) (*StateChannel, bool) {
 	return sc, ok
 }
 
-func (s *State) Handle(ctx context.Context, e interface{}) (err error) {
+func (s *State) handle(e interface{}) (err error) {
 	switch e := e.(type) {
 	case *EventReady:
-		err = s.ready(ctx, e)
+		err = s.ready(e)
 	case *EventChannelCreate:
-		err = s.createChannel(ctx, e)
+		err = s.createChannel(e)
 	case *EventChannelUpdate:
-		err = s.updateChannel(ctx, e)
+		err = s.updateChannel(e)
 	case *EventChannelDelete:
-		err = s.deleteChannel(ctx, e)
+		err = s.deleteChannel(e)
 	case *EventGuildCreate:
-		err = s.createGuild(ctx, e)
+		err = s.createGuild(e)
 	case *EventGuildUpdate:
-		err = s.updateGuild(ctx, e)
+		err = s.updateGuild(e)
 	case *EventGuildDelete:
-		err = s.deleteGuild(ctx, e)
+		err = s.deleteGuild(e)
 	case *EventGuildEmojisUpdate:
-		err = s.updateGuildEmojis(ctx, e)
+		err = s.updateGuildEmojis(e)
 	case *EventGuildMemberAdd:
-		err = s.addGuildMember(ctx, e)
+		err = s.addGuildMember(e)
 	case *eventGuildMemberRemove:
-		err = s.removeGuildMember(ctx, e)
+		err = s.removeGuildMember(e)
 	case *eventGuildMemberUpdate:
-		err = s.updateGuildMember(ctx, e)
+		err = s.updateGuildMember(e)
 	case *eventGuildMembersChunk:
-		err = s.chunkGuildMembers(ctx, e)
+		err = s.chunkGuildMembers(e)
 	case *eventGuildRoleCreate:
-		err = s.createGuildRole(ctx, e)
+		err = s.createGuildRole(e)
 	case *eventGuildRoleUpdate:
-		err = s.updateGuildRole(ctx, e)
+		err = s.updateGuildRole(e)
 	case *eventGuildRoleDelete:
-		err = s.deleteGuildRole(ctx, e)
+		err = s.deleteGuildRole(e)
 	case *EventPresenceUpdate:
-		err = s.updatePresence(ctx, e)
+		err = s.updatePresence(e)
 	case *EventUserUpdate:
-		err = s.updateUser(ctx, e)
+		s.updateUser(e)
 	case *EventVoiceStateUpdate:
-		err = s.updateVoiceState(ctx, e)
+		err = s.updateVoiceState(e)
 	}
 	return err
 }
 
-func (s *State) ready(ctx context.Context, e *EventReady) error {
+func (s *State) ready(e *EventReady) error {
+	// No locks necessary. Access is serialized by the accessor GatewayClient.
+	s.sessionID = e.SessionID
+
 	s.userMu.Lock()
 	s.dmChannelsMu.Lock()
 	s.guildsMu.Lock()
@@ -526,11 +530,11 @@ func (s *State) ready(ctx context.Context, e *EventReady) error {
 	return nil
 }
 
-func (s *State) createChannel(ctx context.Context, e *EventChannelCreate) error {
+func (s *State) createChannel(e *EventChannelCreate) error {
 	return s.insertChannel(&e.ModelChannel)
 }
 
-func (s *State) updateChannel(ctx context.Context, e *EventChannelUpdate) error {
+func (s *State) updateChannel(e *EventChannelUpdate) error {
 	return s.insertChannel(&e.ModelChannel)
 }
 
@@ -573,7 +577,7 @@ func (s *State) insertChannel(c *ModelChannel) error {
 	return nil
 }
 
-func (s *State) deleteChannel(ctx context.Context, e *EventChannelDelete) error {
+func (s *State) deleteChannel(e *EventChannelDelete) error {
 	if e.Type == ModelChannelTypeDM || e.Type == ModelChannelTypeGroupDM {
 		s.dmChannelsMu.Lock()
 		delete(s.dmChannels, e.ID)
@@ -596,7 +600,7 @@ func (s *State) deleteChannel(ctx context.Context, e *EventChannelDelete) error 
 	return nil
 }
 
-func (s *State) createGuild(ctx context.Context, e *EventGuildCreate) error {
+func (s *State) createGuild(e *EventGuildCreate) error {
 	sg := new(StateGuild)
 	sg.updateFromModel(&e.ModelGuild)
 
@@ -653,7 +657,7 @@ func (s *State) createGuild(ctx context.Context, e *EventGuildCreate) error {
 	return nil
 }
 
-func (s *State) updateGuild(ctx context.Context, e *EventGuildUpdate) error {
+func (s *State) updateGuild(e *EventGuildUpdate) error {
 	sg, ok := s.guilds[e.ID]
 	if !ok {
 		return errUnknownGuild
@@ -662,7 +666,7 @@ func (s *State) updateGuild(ctx context.Context, e *EventGuildUpdate) error {
 	return nil
 }
 
-func (s *State) deleteGuild(ctx context.Context, e *EventGuildDelete) error {
+func (s *State) deleteGuild(e *EventGuildDelete) error {
 	sg, ok := s.guilds[e.ID]
 	if !ok {
 		return errUnknownGuild
@@ -689,7 +693,7 @@ func (s *State) deleteGuild(ctx context.Context, e *EventGuildDelete) error {
 	return nil
 }
 
-func (s *State) updateGuildEmojis(ctx context.Context, e *EventGuildEmojisUpdate) error {
+func (s *State) updateGuildEmojis(e *EventGuildEmojisUpdate) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -700,7 +704,7 @@ func (s *State) updateGuildEmojis(ctx context.Context, e *EventGuildEmojisUpdate
 	return nil
 }
 
-func (s *State) addGuildMember(ctx context.Context, e *EventGuildMemberAdd) error {
+func (s *State) addGuildMember(e *EventGuildMemberAdd) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -712,7 +716,7 @@ func (s *State) addGuildMember(ctx context.Context, e *EventGuildMemberAdd) erro
 	return nil
 }
 
-func (s *State) removeGuildMember(ctx context.Context, e *eventGuildMemberRemove) error {
+func (s *State) removeGuildMember(e *eventGuildMemberRemove) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -724,7 +728,7 @@ func (s *State) removeGuildMember(ctx context.Context, e *eventGuildMemberRemove
 	return nil
 }
 
-func (s *State) updateGuildMember(ctx context.Context, e *eventGuildMemberUpdate) error {
+func (s *State) updateGuildMember(e *eventGuildMemberUpdate) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -747,15 +751,15 @@ func (s *State) updateGuildMember(ctx context.Context, e *eventGuildMemberUpdate
 }
 
 // TODO not sure how to handle this stuff
-func (s *State) chunkGuildMembers(ctx context.Context, e *eventGuildMembersChunk) error {
+func (s *State) chunkGuildMembers(e *eventGuildMembersChunk) error {
 	panic("TODO")
 }
 
-func (s *State) createGuildRole(ctx context.Context, e *eventGuildRoleCreate) error {
+func (s *State) createGuildRole(e *eventGuildRoleCreate) error {
 	return s.insertGuildRole(e.GuildID, &e.Role)
 }
 
-func (s *State) updateGuildRole(ctx context.Context, e *eventGuildRoleUpdate) error {
+func (s *State) updateGuildRole(e *eventGuildRoleUpdate) error {
 	return s.insertGuildRole(e.GuildID, &e.Role)
 }
 
@@ -770,7 +774,7 @@ func (s *State) insertGuildRole(gID string, r *ModelRole) error {
 	return nil
 }
 
-func (s *State) deleteGuildRole(ctx context.Context, e *eventGuildRoleDelete) error {
+func (s *State) deleteGuildRole(e *eventGuildRoleDelete) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -781,7 +785,7 @@ func (s *State) deleteGuildRole(ctx context.Context, e *eventGuildRoleDelete) er
 	return nil
 }
 
-func (s *State) updatePresence(ctx context.Context, e *EventPresenceUpdate) error {
+func (s *State) updatePresence(e *EventPresenceUpdate) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -792,14 +796,13 @@ func (s *State) updatePresence(ctx context.Context, e *EventPresenceUpdate) erro
 	return nil
 }
 
-func (s *State) updateUser(ctx context.Context, e *EventUserUpdate) error {
+func (s *State) updateUser(e *EventUserUpdate) {
 	s.userMu.Lock()
 	s.user = &e.ModelUser
 	s.userMu.Unlock()
-	return nil
 }
 
-func (s *State) updateVoiceState(ctx context.Context, e *EventVoiceStateUpdate) error {
+func (s *State) updateVoiceState(e *EventVoiceStateUpdate) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild

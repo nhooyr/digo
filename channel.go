@@ -190,8 +190,8 @@ type EndpointChannel struct {
 	*endpoint
 }
 
-func (c *Client) Channel(cID string) EndpointChannel {
-	e2 := c.e.appendMajor("channels").appendMajor(cID)
+func (c *RESTClient) Channel(cID string) EndpointChannel {
+	e2 := c.rootEndpoint().appendMajor("channels").appendMajor(cID)
 	return EndpointChannel{e2}
 }
 

@@ -8,7 +8,7 @@ import (
 
 func TestGateway_Get(t *testing.T) {
 	e := client.Gateway()
-	url, err := e.Get()
+	url, err := e.GetURL()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -16,14 +16,17 @@ func TestGateway_Get(t *testing.T) {
 }
 
 func TestConn_Connect(t *testing.T) {
-	gatewayURL, err := client.Gateway().Get()
+	gatewayURL, err := client.Gateway().GetURL()
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := NewDialConfig()
-	config.GatewayURL = gatewayURL
-	config.Token = os.Getenv("DISCORD_TOKEN")
-	c, err := Dial(config)
+
+	c := &GatewayClient{
+		Token:      os.Getenv("DISCORD_TOKEN"),
+		GatewayURL: gatewayURL,
+	}
+
+	err = c.Connect()
 	if err != nil {
 		t.Fatal(err)
 	}

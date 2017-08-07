@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"runtime"
@@ -14,18 +13,19 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/nhooyr/log"
 )
 
 type EndpointGateway struct {
 	*endpoint
 }
 
-func (c *Client) Gateway() EndpointGateway {
-	e2 := c.e.appendMajor("gateway")
+func (c *RESTClient) Gateway() EndpointGateway {
+	e2 := c.rootEndpoint().appendMajor("gateway")
 	return EndpointGateway{e2}
 }
 
-func (e EndpointGateway) Get() (url string, err error) {
+func (e EndpointGateway) GetURL() (url string, err error) {
 	var urlStruct struct {
 		URL string `json:"url"`
 	}
@@ -47,6 +47,7 @@ type ModelGatewayBotGetResponse struct {
 	Shards int    `json:"shards"`
 }
 
+// TODO better name?
 func (e EndpointGatewayBot) Get(ctx context.Context) (resp *ModelGatewayBotGetResponse, err error) {
 	return resp, e.doMethod(ctx, "GET", nil, &resp)
 }
@@ -55,16 +56,23 @@ type EventHandler interface {
 	Handle(ctx context.Context, e interface{}) error
 }
 
-type Conn struct {
-	token        string
-	gatewayURL   string
-	eventHandler EventHandler
-	errorHandler func(err error)
-	logf         func(format string, v ...interface{})
+type EventHandlerFunc func(ctx context.Context, e interface{}) error
 
-	sessionID string
+func (h EventHandlerFunc) Handle(ctx context.Context, e interface{}) error {
+	return h(ctx, e)
+}
 
-	shard        *[2]int
+type GatewayClient struct {
+	// Configuration. Maybe extract into GatewayClientConfig?
+	Token        string
+	GatewayURL   string
+	EventHandler EventHandler
+	ErrorHandler func(err error)
+	Logf         func(format string, v ...interface{})
+	Shard        int
+	ShardCount   int
+
+	state        *State
 	lastIdentify time.Time
 	ready        bool
 	resuming     bool
@@ -82,65 +90,43 @@ type Conn struct {
 	sequenceNumber        int
 }
 
-func NewConn(config *DialConfig) *Conn {
-	c := &Conn{
-		token:        config.Token,
-		gatewayURL:   config.GatewayURL + "?v=" + apiVersion + "&encoding=json",
-		eventHandler: config.EventHandler,
-		errorHandler: config.ErrorHandler,
-		logf:         config.Logf,
+func (c *GatewayClient) State() *State {
+	return c.state
+}
 
-		closeChan:     make(chan struct{}),
-		reconnectChan: make(chan struct{}),
-		writeChan:     make(chan *sentPayload),
-		ready:         true,
+func (c *GatewayClient) Connect() error {
+	if c.GatewayURL == "" {
+		panic("missing gateway URL")
 	}
-	if config.ShardsCount > 1 {
-		c.shard = &[2]int{config.Shard, config.ShardsCount}
+	if c.Token == "" {
+		panic("missing API token")
 	}
-	return c
-}
 
-type EventHandlerFunc func(ctx context.Context, e interface{}) error
-
-func (h EventHandlerFunc) Handle(ctx context.Context, e interface{}) error {
-	return h(ctx, e)
-}
-
-type DialConfig struct {
-	GatewayURL   string
-	Token        string
-	EventHandler EventHandler
-
-	// These may be called concurrently.
-	ErrorHandler func(err error)
-	Logf         func(format string, v ...interface{})
-
-	Shard       int
-	ShardsCount int
-}
-
-// NewDialConfig returns a new *DialConfig with sane defaults.
-// TODO I don't like this because it's not obvious that GatewayURL and Token are required. Hmm.
-func NewDialConfig() *DialConfig {
-	return &DialConfig{
-		ErrorHandler: func(err error) {
-			log.Print(err)
-		},
-		Logf: func(format string, v ...interface{}) {
-			log.Printf(format, v...)
-		},
+	if c.Logf == nil {
+		c.Logf = func(f string, v ...interface{}) {
+			log.Printf(f, v)
+		}
 	}
-}
 
-func Dial(c *Conn, config *DialConfig) error {
+	if c.ErrorHandler == nil {
+		c.ErrorHandler = func(err error) {
+			c.log(err)
+		}
+	}
 
-	return c.dial()
+	c.GatewayURL += "?v=" + apiVersion + "&encoding=json"
+	c.closeChan = make(chan struct{})
+	c.reconnectChan = make(chan struct{})
+	c.writeChan = make(chan *sentPayload)
+	c.ready = true
+
+	c.state = new(State)
+	return c.connect()
 }
 
 // If it errors without receiving a operationDispatch payload, then
 // this method will always return an error.
-func (c *Conn) dial() (err error) {
+func (c *GatewayClient) connect() error {
 	if !c.ready {
 		return errors.New("already tried to connect and failed")
 	}
@@ -152,7 +138,8 @@ func (c *Conn) dial() (err error) {
 
 	// TODO Need to set read deadline for hello packet and I also need to set write deadlines.
 	// TODO also max message
-	c.wsConn, _, err = websocket.DefaultDialer.Dial(c.gatewayURL, nil)
+	var err error
+	c.wsConn, _, err = websocket.DefaultDialer.Dial(c.GatewayURL, nil)
 	if err != nil {
 		return err
 	}
@@ -162,7 +149,7 @@ func (c *Conn) dial() (err error) {
 	return nil
 }
 
-func (c *Conn) manager() {
+func (c *GatewayClient) manager() {
 	ctx, cancelFn := context.WithCancel(context.Background())
 	c.runWorker(func() {
 		c.writeLoop(ctx)
@@ -171,7 +158,7 @@ func (c *Conn) manager() {
 		c.readLoop(ctx)
 	})
 
-	if c.sessionID == "" {
+	if c.state.sessionID == "" {
 		c.identify(ctx)
 	} else {
 		c.resume(ctx)
@@ -179,17 +166,17 @@ func (c *Conn) manager() {
 
 	select {
 	case <-c.reconnectChan:
-		c.logf("restarting")
+		c.Logf("restarting")
 
 		cancelFn()
 		c.wg.Wait()
 
-		err := c.dial()
+		err := c.connect()
 		if err != nil {
 			c.log(err)
 		}
 	case <-c.closeChan:
-		c.logf("exiting")
+		c.Logf("exiting")
 
 		cancelFn()
 		c.wg.Wait()
@@ -219,7 +206,7 @@ type sentPayload struct {
 	Sequence  int         `json:"s,omitempty"`
 }
 
-func (c *Conn) writeLoop(ctx context.Context) {
+func (c *GatewayClient) writeLoop(ctx context.Context) {
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 
@@ -250,7 +237,7 @@ writeLoop:
 
 			err := c.wsConn.WriteJSON(p)
 			if err != nil {
-				c.errorHandler(err)
+				c.ErrorHandler(err)
 				select {
 				case c.reconnectChan <- struct{}{}:
 				case <-ctx.Done():
@@ -271,12 +258,12 @@ writeLoop:
 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNoStatusReceived, "no heartbeat acknowledgment")
 	err = c.wsConn.WriteMessage(websocket.CloseMessage, closeMsg)
 	if err != nil {
-		c.errorHandler(err)
+		c.ErrorHandler(err)
 	}
 
 	err = c.wsConn.Close()
 	if err != nil {
-		c.errorHandler(err)
+		c.ErrorHandler(err)
 	}
 }
 
@@ -294,18 +281,18 @@ type identifyProperties struct {
 	Device  string `json:"$device,omitempty"`
 }
 
-func (c *Conn) write(ctx context.Context, p *sentPayload) {
+func (c *GatewayClient) write(ctx context.Context, p *sentPayload) {
 	select {
 	case c.writeChan <- p:
 	case <-ctx.Done():
 	}
 }
 
-func (c *Conn) identify(ctx context.Context) {
+func (c *GatewayClient) identify(ctx context.Context) {
 	p := &sentPayload{
 		Operation: operationIdentify,
 		Data: dataOpIdentify{
-			Token: c.token,
+			Token: c.Token,
 			Properties: identifyProperties{
 				OS:      runtime.GOOS,
 				Browser: userAgent,
@@ -313,8 +300,11 @@ func (c *Conn) identify(ctx context.Context) {
 			},
 			Compress:       true,
 			LargeThreshold: 250,
-			Shard:          c.shard,
 		},
+	}
+
+	if c.ShardCount > 1 {
+		p.Data.(*dataOpIdentify).Shard = &[2]int{c.Shard, c.ShardCount}
 	}
 
 	c.write(ctx, p)
@@ -326,15 +316,15 @@ type dataOpResume struct {
 	Seq       int    `json:"seq"`
 }
 
-func (c *Conn) resume(ctx context.Context) {
+func (c *GatewayClient) resume(ctx context.Context) {
 	c.resuming = true
 
 	c.heartbeatMu.Lock()
 	p := &sentPayload{
 		Operation: operationResume,
 		Data: dataOpResume{
-			Token:     c.token,
-			SessionID: c.sessionID,
+			Token:     c.Token,
+			SessionID: c.state.sessionID,
 			Seq:       c.sequenceNumber,
 		},
 	}
@@ -342,7 +332,7 @@ func (c *Conn) resume(ctx context.Context) {
 	c.write(ctx, p)
 }
 
-func (c *Conn) runWorker(fn func()) {
+func (c *GatewayClient) runWorker(fn func()) {
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -357,12 +347,12 @@ type receivedPayload struct {
 	Type           string          `json:"t,omitempty"` // omitempty for logging purposes
 }
 
-func (c *Conn) readLoop(ctx context.Context) {
+func (c *GatewayClient) readLoop(ctx context.Context) {
 	for {
 		p, err := c.readPayload()
 		if err != nil {
 			if !isUseOfClosedError(err) {
-				c.errorHandler(err)
+				c.ErrorHandler(err)
 				// It's possible we're being shutdown right now too.
 				// Or maybe manager is already trying to reconnect.
 				select {
@@ -378,11 +368,11 @@ func (c *Conn) readLoop(ctx context.Context) {
 		if err != nil {
 			panic(err)
 		}
-		c.logf("%s", b)
+		c.Logf("%s", b)
 
 		err = c.onPayload(ctx, p)
 		if err != nil {
-			c.errorHandler(err)
+			c.ErrorHandler(err)
 			// It's possible we're being shutdown right now.
 			// Or maybe manager is already trying to reconnect.
 			select {
@@ -393,7 +383,7 @@ func (c *Conn) readLoop(ctx context.Context) {
 	}
 }
 
-func (c *Conn) readPayload() (*receivedPayload, error) {
+func (c *GatewayClient) readPayload() (*receivedPayload, error) {
 	var p receivedPayload
 	msgType, r, err := c.wsConn.NextReader()
 	if err != nil {
@@ -434,7 +424,7 @@ type dataOpHello struct {
 	Trace             []string `json:"_trace"`
 }
 
-func (c *Conn) onPayload(ctx context.Context, p *receivedPayload) error {
+func (c *GatewayClient) onPayload(ctx context.Context, p *receivedPayload) error {
 	switch p.Operation {
 	case operationHello:
 		var hello dataOpHello
@@ -496,7 +486,7 @@ func readEvent(p *receivedPayload) (interface{}, error) {
 	return e, nil
 }
 
-func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
+func (c *GatewayClient) onDispatch(ctx context.Context, p *receivedPayload) error {
 	c.ready = true
 	c.resuming = false
 
@@ -508,19 +498,28 @@ func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
 	if err != nil {
 		return &EventHandlerError{
 			EventName: p.Type,
+			Event:     e,
 			Err:       err,
 		}
 	}
 
-	if e, ok := e.(*EventReady); ok {
-		c.sessionID = e.SessionID
+	err = c.state.handle(e)
+	if err != nil {
+		if err == errHandled {
+			return nil
+		}
+		return &EventHandlerError{
+			EventName: p.Type,
+			Event:     e,
+			Err:       err,
+		}
 	}
 
-	if c.eventHandler == nil {
+	if c.EventHandler == nil {
 		return nil
 	}
 
-	err = c.eventHandler.Handle(ctx, e)
+	err = c.EventHandler.Handle(ctx, e)
 	if err != nil {
 		return &EventHandlerError{
 			EventName: p.Type,
@@ -532,7 +531,7 @@ func (c *Conn) onDispatch(ctx context.Context, p *receivedPayload) error {
 	return nil
 }
 
-func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
+func (c *GatewayClient) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
 	t := time.NewTicker(time.Duration(heartbeatInterval) * time.Millisecond)
 	defer t.Stop()
 	for {
@@ -554,7 +553,7 @@ func (c *Conn) heartbeatLoop(ctx context.Context, heartbeatInterval int) {
 	}
 }
 
-func (c *Conn) heartbeat() error {
+func (c *GatewayClient) heartbeat() error {
 	c.heartbeatMu.Lock()
 	if !c.heartbeatAcknowledged {
 		c.heartbeatMu.Unlock()
@@ -569,13 +568,13 @@ func (c *Conn) heartbeat() error {
 }
 
 // Close closes the connection. It never returns an error.
-// All errors will be handled by the ErrorHandler given in the DialConfig.
-func (c *Conn) Close() error {
+// All errors will be handled by the ErrorHandler given in the GatewayClientConfig.
+func (c *GatewayClient) Close() error {
 	c.closeChan <- struct{}{}
 	<-c.closeChan
 	return nil
 }
 
-func (c *Conn) log(v interface{}) {
-	c.logf("%v", v)
+func (c *GatewayClient) log(v interface{}) {
+	c.Logf("%v", v)
 }

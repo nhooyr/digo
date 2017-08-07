@@ -13,36 +13,26 @@ import (
 	"time"
 )
 
-type Client struct {
+type RESTClient struct {
 	Token      string
 	HttpClient *http.Client
 
 	rl *rateLimiter
-	e  *endpoint
 }
 
 const (
 	apiVersion  = "6"
 	endpointAPI = "https://discordapp.com/api/v" + apiVersion
+	Version     = "0.1.0"
 )
 
-func NewClient() *Client {
-	c := &Client{
-		HttpClient: &http.Client{Timeout: 20 * time.Second},
-		rl:         newRateLimiter(),
-	}
-	c.e = &endpoint{
-		c:   c,
-		url: endpointAPI,
-	}
-	return c
+func (c *RESTClient) rootEndpoint() *endpoint {
+	return &endpoint{c: c, url: endpointAPI}
 }
-
-const Version = "0.1.0"
 
 var userAgent = fmt.Sprintf("DiscordBot (https://github.com/nhooyr/discgo, %v)", Version)
 
-func (c *Client) newRequest(ctx context.Context, method, url string, body io.Reader) *http.Request {
+func (c *RESTClient) newRequest(ctx context.Context, method, url string, body io.Reader) *http.Request {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		panic(err)
@@ -52,12 +42,18 @@ func (c *Client) newRequest(ctx context.Context, method, url string, body io.Rea
 	return req.WithContext(ctx)
 }
 
-func (c *Client) do(req *http.Request, rateLimitPath string) ([]byte, error) {
+func (c *RESTClient) do(req *http.Request, rateLimitPath string) ([]byte, error) {
+	if c.rl == nil {
+		c.rl = newRateLimiter()
+		if c.HttpClient == nil {
+			c.HttpClient = &http.Client{Timeout: 20 * time.Second}
+		}
+	}
 	return c.doN(req, rateLimitPath, 0)
 }
 
 // TODO exponential backoff maybe? or too much in this library? not sure.
-func (c *Client) doN(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
+func (c *RESTClient) doN(req *http.Request, rateLimitPath string, n int) ([]byte, error) {
 	prl := c.rl.getPathRateLimiter(rateLimitPath)
 	prl.lock()
 	resp, err := c.HttpClient.Do(req)
@@ -125,7 +121,7 @@ func (err *APIError) Error() string {
 }
 
 type endpoint struct {
-	c             *Client
+	c             *RESTClient
 	url           string
 	rateLimitPath string
 }

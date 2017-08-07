@@ -97,8 +97,8 @@ type EndpointGuilds struct {
 	*endpoint
 }
 
-func (c *Client) Guilds() EndpointGuilds {
-	e2 := c.e.appendMajor("guilds")
+func (c *RESTClient) Guilds() EndpointGuilds {
+	e2 := c.rootEndpoint().appendMajor("guilds")
 	return EndpointGuilds{e2}
 }
 
@@ -131,7 +131,7 @@ type EndpointGuild struct {
 	*endpoint
 }
 
-func (c *Client) Guild(gID string) EndpointGuild {
+func (c *RESTClient) Guild(gID string) EndpointGuild {
 	e2 := c.Guilds().appendMajor(gID)
 	return EndpointGuild{e2}
 }

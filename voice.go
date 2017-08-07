@@ -29,8 +29,8 @@ type EndpointVoiceRegions struct {
 	*endpoint
 }
 
-func (c *Client) VoiceRegions() EndpointVoiceRegions {
-	e2 := c.e.appendMajor("voice").appendMajor("regions")
+func (c *RESTClient) VoiceRegions() EndpointVoiceRegions {
+	e2 := c.rootEndpoint().appendMajor("voice").appendMajor("regions")
 	return EndpointVoiceRegions{e2}
 }
 

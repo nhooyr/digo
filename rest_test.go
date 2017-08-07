@@ -7,17 +7,16 @@ import (
 	"testing"
 )
 
-var client *Client
-
-func init() {
-	client = NewClient()
-	// TODO maybe make it all a simple struct like acme's autocert manager but that's so magical :(
-	client.Token = os.Getenv("DISCORD_TOKEN")
-}
+var (
+	client = &RESTClient{
+		Token: os.Getenv("DISCORD_TOKEN"),
+	}
+	ctx = context.Background()
+)
 
 func TestClient_APIError(t *testing.T) {
-	c := NewClient()
-	_, err := c.Me().Connections().Get(context.Background())
+	c := new(RESTClient)
+	_, err := c.Me().Connections().Get(ctx)
 	if err == nil {
 		t.Fatal("expected non nil error")
 	}

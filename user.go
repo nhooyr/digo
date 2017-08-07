@@ -37,8 +37,8 @@ type EndpointUser struct {
 	*endpoint
 }
 
-func (c *Client) User(uID string) EndpointUser {
-	e2 := c.e.appendMajor("users").appendMinor(uID)
+func (c *RESTClient) User(uID string) EndpointUser {
+	e2 := c.rootEndpoint().appendMajor("users").appendMinor(uID)
 	return EndpointUser{e2}
 }
 
@@ -50,7 +50,7 @@ type EndpointMe struct {
 	*endpoint
 }
 
-func (c *Client) Me() EndpointMe {
+func (c *RESTClient) Me() EndpointMe {
 	e2 := c.User("@me").endpoint
 	return EndpointMe{e2}
 }
