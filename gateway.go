@@ -25,11 +25,12 @@ func (c *RESTClient) Gateway() EndpointGateway {
 	return EndpointGateway{e2}
 }
 
-func (e EndpointGateway) GetURL() (url string, err error) {
+// TODO I don't think a ctx is necessary, ever.
+func (e EndpointGateway) GetURL(ctx context.Context) (url string, err error) {
 	var urlStruct struct {
 		URL string `json:"url"`
 	}
-	return urlStruct.URL, e.doMethod(context.Background(), "GET", nil, &urlStruct)
+	return urlStruct.URL, e.doMethod(ctx, "GET", nil, &urlStruct)
 }
 
 func (e EndpointGateway) Bot() EndpointGatewayBot {

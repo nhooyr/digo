@@ -1,7 +1,6 @@
 package discgo
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -17,7 +16,7 @@ func TestClient_GetChannelMessages(t *testing.T) {
 	params := &ParamsMessagesGet{
 		Limit: 5,
 	}
-	messages, err := client.Channel(cID).Messages().Get(context.Background(), params)
+	messages, err := client.Channel(cID).Messages().Get(ctx, params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +24,7 @@ func TestClient_GetChannelMessages(t *testing.T) {
 }
 
 func TestClient_GetChannelMessage(t *testing.T) {
-	m, err := client.Channel(cID).Message(mID).Get(context.Background())
+	m, err := client.Channel(cID).Message(mID).Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +52,7 @@ func TestClient_CreateMessage(t *testing.T) {
 			},
 		},
 	}
-	msg, err := client.Channel(cID).Messages().Create(context.Background(), params)
+	msg, err := client.Channel(cID).Messages().Create(ctx, params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,21 +60,21 @@ func TestClient_CreateMessage(t *testing.T) {
 }
 
 func TestClient_CreateReaction(t *testing.T) {
-	err := client.Channel(cID).Message(mID).Reactions().Create(context.Background(), emoji)
+	err := client.Channel(cID).Message(mID).Reactions().Create(ctx, emoji)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClient_DeleteReaction(t *testing.T) {
-	err := client.Channel(cID).Message(mID).Reaction(emoji, "@me").Delete(context.Background())
+	err := client.Channel(cID).Message(mID).Reaction(emoji, "@me").Delete(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClient_GetReactions(t *testing.T) {
-	users, err := client.Channel(cID).Message(mID).Reactions().Get(context.Background(), emoji)
+	users, err := client.Channel(cID).Message(mID).Reactions().Get(ctx, emoji)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +82,7 @@ func TestClient_GetReactions(t *testing.T) {
 }
 
 func TestClient_DeleteReactions(t *testing.T) {
-	err := client.Channel(cID).Message(mID).Reactions().Delete(context.Background())
+	err := client.Channel(cID).Message(mID).Reactions().Delete(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +92,7 @@ func TestClient_UpdateMessage(t *testing.T) {
 	params := &ParamsMessageEdit{
 		Content: "updated wow",
 	}
-	m, err := client.Channel(cID).Message(mID).Edit(context.Background(), params)
+	m, err := client.Channel(cID).Message(mID).Edit(ctx, params)
 	if err != nil {
 		t.Fatal(err)
 	}
