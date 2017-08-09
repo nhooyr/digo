@@ -57,6 +57,10 @@ type EventHandler interface {
 	Handle(ctx context.Context, e interface{}) error
 }
 
+// Returned by a EventHandler to signal that the event should not be handled further.
+// This is used by State to prevent GuildCreate events handlers from running when a guild becomes available again.
+var ErrEventDone = errors.New("event is done; no need to handle the event further")
+
 type EventHandlerFunc func(ctx context.Context, e interface{}) error
 
 func (h EventHandlerFunc) Handle(ctx context.Context, e interface{}) error {
@@ -70,10 +74,11 @@ type GatewayClient struct {
 	EventHandler EventHandler
 	ErrorHandler func(err error)
 	Logf         func(format string, v ...interface{})
+	Debug        bool // enables logging of events.
 	Shard        int
 	ShardCount   int
 
-	state        *State
+	sessionID    string
 	lastIdentify time.Time
 	ready        bool
 	resuming     bool
@@ -91,8 +96,8 @@ type GatewayClient struct {
 	sequenceNumber        int
 }
 
-func (c *GatewayClient) State() *State {
-	return c.state
+func (c *GatewayClient) log(v interface{}) {
+	c.Logf("%v", v)
 }
 
 func (c *GatewayClient) Connect() error {
@@ -105,7 +110,7 @@ func (c *GatewayClient) Connect() error {
 
 	if c.Logf == nil {
 		c.Logf = func(f string, v ...interface{}) {
-			log.Printf(f, v)
+			log.Printf(f, v...)
 		}
 	}
 
@@ -121,7 +126,6 @@ func (c *GatewayClient) Connect() error {
 	c.writeChan = make(chan *sentPayload)
 	c.ready = true
 
-	c.state = new(State)
 	return c.connect()
 }
 
@@ -137,6 +141,7 @@ func (c *GatewayClient) connect() error {
 	c.heartbeatAcknowledged = true
 	c.lastIdentify = time.Time{}
 
+	c.Logf("connecting")
 	// TODO Need to set read deadline for hello packet and I also need to set write deadlines.
 	// TODO also max message
 	var err error
@@ -159,9 +164,11 @@ func (c *GatewayClient) manager() {
 		c.readLoop(ctx)
 	})
 
-	if c.state.sessionID == "" {
+	if c.sessionID == "" {
+		c.Logf("identifying")
 		c.identify(ctx)
 	} else {
+		c.Logf("resuming")
 		c.resume(ctx)
 	}
 
@@ -246,6 +253,14 @@ writeLoop:
 				break writeLoop
 			}
 
+			if c.Debug {
+				b, err := json.MarshalIndent(p, "", "    ")
+				if err != nil {
+					panic(err)
+				}
+				c.Logf("write: %s", b)
+			}
+
 			if ok {
 				c.lastIdentify = time.Now()
 			}
@@ -325,7 +340,7 @@ func (c *GatewayClient) resume(ctx context.Context) {
 		Operation: operationResume,
 		Data: dataOpResume{
 			Token:     c.Token,
-			SessionID: c.state.sessionID,
+			SessionID: c.sessionID,
 			Seq:       c.sequenceNumber,
 		},
 	}
@@ -333,6 +348,7 @@ func (c *GatewayClient) resume(ctx context.Context) {
 	c.write(ctx, p)
 }
 
+// TODO maybe export?
 func (c *GatewayClient) runWorker(fn func()) {
 	c.wg.Add(1)
 	go func() {
@@ -364,12 +380,13 @@ func (c *GatewayClient) readLoop(ctx context.Context) {
 			return
 		}
 
-		// TODO maybe make readPayload return JSON bytes too?
-		b, err := json.MarshalIndent(p, "", "    ")
-		if err != nil {
-			panic(err)
+		if c.Debug {
+			b, err := json.MarshalIndent(p, "", "    ")
+			if err != nil {
+				panic(err)
+			}
+			c.Logf("read: %s", b)
 		}
-		c.Logf("%s", b)
 
 		err = c.onPayload(ctx, p)
 		if err != nil {
@@ -504,16 +521,12 @@ func (c *GatewayClient) onDispatch(ctx context.Context, p *receivedPayload) erro
 		}
 	}
 
-	err = c.state.handle(e)
-	if err != nil {
-		if err == errHandled {
-			return nil
-		}
-		return &EventHandlerError{
-			EventName: p.Type,
-			Event:     e,
-			Err:       err,
-		}
+	switch e := e.(type) {
+	case *EventReady:
+		c.Logf("ready")
+		c.sessionID = e.SessionID
+	case *eventResumed:
+		c.Logf("resumed")
 	}
 
 	if c.EventHandler == nil {
@@ -522,13 +535,16 @@ func (c *GatewayClient) onDispatch(ctx context.Context, p *receivedPayload) erro
 
 	err = c.EventHandler.Handle(ctx, e)
 	if err != nil {
+		// Possible someone forgot to handle ErrEventDone.
+		if err == ErrEventDone {
+			return nil
+		}
 		return &EventHandlerError{
 			EventName: p.Type,
 			Event:     e,
 			Err:       err,
 		}
 	}
-
 	return nil
 }
 
@@ -574,8 +590,4 @@ func (c *GatewayClient) Close() error {
 	c.closeChan <- struct{}{}
 	<-c.closeChan
 	return nil
-}
-
-func (c *GatewayClient) log(v interface{}) {
-	c.Logf("%v", v)
 }

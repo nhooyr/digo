@@ -278,7 +278,6 @@ type StateChannel struct {
 	permissionOverwrites []*ModelPermissionOverwrite
 	name                 string
 	topic                string
-	lastMessageID        string
 	bitrate              int
 	userLimit            int
 	recipients           []*ModelUser
@@ -331,12 +330,6 @@ func (sc *StateChannel) Topic() string {
 	return sc.topic
 }
 
-func (sc *StateChannel) LastMessageID() string {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-	return sc.lastMessageID
-}
-
 func (sc *StateChannel) Bitrate() int {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
@@ -384,7 +377,8 @@ func (sc *StateChannel) updateFromModel(c *ModelChannel) {
 	sc.permissionOverwrites = c.PermissionOverwrites
 	sc.name = c.Name
 	sc.topic = c.Topic
-	sc.lastMessageID = c.LastMessageID
+	// TODO not sure but I don't think I need lastMessageID. Sounds useless. If I use it, I'll have to keep it updated with the latest messages. And then I'll need StateMessage because it would make sense to change the ChannelID Field to a StateChannel.
+	// sc.lastMessageID = c.LastMessageID
 	sc.bitrate = c.Bitrate
 	sc.userLimit = c.UserLimit
 	sc.recipients = c.Recipients
@@ -397,7 +391,6 @@ func (sc *StateChannel) updateFromModel(c *ModelChannel) {
 // State errors.
 var (
 	errUnknownGuild       = errors.New("unknown guild")
-	errHandled            = errors.New("no need to handle the event further")
 	errUnknownGuildMember = errors.New("unknown guild member")
 	errGuildAlreadyExists = errors.New("guild already exists?")
 )
@@ -455,49 +448,49 @@ func (s *State) channel(cID string) (*StateChannel, bool) {
 	return sc, ok
 }
 
-func (s *State) handle(e interface{}) (err error) {
+func (s *State) handle(e interface{}) error {
 	switch e := e.(type) {
 	case *EventReady:
-		err = s.ready(e)
+		s.ready(e)
 	case *EventChannelCreate:
-		err = s.createChannel(e)
+		return s.createChannel(e)
 	case *EventChannelUpdate:
-		err = s.updateChannel(e)
+		return s.updateChannel(e)
 	case *EventChannelDelete:
-		err = s.deleteChannel(e)
+		return s.deleteChannel(e)
 	case *EventGuildCreate:
-		err = s.createGuild(e)
+		return s.createGuild(e)
 	case *EventGuildUpdate:
-		err = s.updateGuild(e)
+		return s.updateGuild(e)
 	case *EventGuildDelete:
-		err = s.deleteGuild(e)
+		return s.deleteGuild(e)
 	case *EventGuildEmojisUpdate:
-		err = s.updateGuildEmojis(e)
+		return s.updateGuildEmojis(e)
 	case *EventGuildMemberAdd:
-		err = s.addGuildMember(e)
-	case *eventGuildMemberRemove:
-		err = s.removeGuildMember(e)
-	case *eventGuildMemberUpdate:
-		err = s.updateGuildMember(e)
-	case *eventGuildMembersChunk:
-		err = s.chunkGuildMembers(e)
-	case *eventGuildRoleCreate:
-		err = s.createGuildRole(e)
-	case *eventGuildRoleUpdate:
-		err = s.updateGuildRole(e)
-	case *eventGuildRoleDelete:
-		err = s.deleteGuildRole(e)
+		return s.addGuildMember(e)
+	case *EventGuildMemberRemove:
+		return s.removeGuildMember(e)
+	case *EventGuildMemberUpdate:
+		return s.updateGuildMember(e)
+	case *EventGuildMembersChunk:
+		return s.chunkGuildMembers(e)
+	case *EventGuildRoleCreate:
+		return s.createGuildRole(e)
+	case *EventGuildRoleUpdate:
+		return s.updateGuildRole(e)
+	case *EventGuildRoleDelete:
+		return s.deleteGuildRole(e)
 	case *EventPresenceUpdate:
-		err = s.updatePresence(e)
+		return s.updatePresence(e)
 	case *EventUserUpdate:
 		s.updateUser(e)
 	case *EventVoiceStateUpdate:
-		err = s.updateVoiceState(e)
+		return s.updateVoiceState(e)
 	}
-	return err
+	return nil
 }
 
-func (s *State) ready(e *EventReady) error {
+func (s *State) ready(e *EventReady) {
 	// No locks necessary. Access is serialized by the accessor GatewayClient.
 	s.sessionID = e.SessionID
 
@@ -526,8 +519,6 @@ func (s *State) ready(e *EventReady) error {
 	s.dmChannelsMu.Unlock()
 	s.guildsMu.Unlock()
 	s.guildChannelsMu.Unlock()
-
-	return nil
 }
 
 func (s *State) createChannel(e *EventChannelCreate) error {
@@ -648,7 +639,7 @@ func (s *State) createGuild(e *EventGuildCreate) error {
 		if sgOld.unavailable {
 			// Guild is available again or was lazily loaded.
 			// Either way, don't run any GuildCreate event handlers.
-			return errHandled
+			return ErrEventDone
 		}
 		// We updated the guild map even though the state is now corrupt.
 		// Shouldn't really be an issue though.
@@ -716,7 +707,7 @@ func (s *State) addGuildMember(e *EventGuildMemberAdd) error {
 	return nil
 }
 
-func (s *State) removeGuildMember(e *eventGuildMemberRemove) error {
+func (s *State) removeGuildMember(e *EventGuildMemberRemove) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -728,7 +719,7 @@ func (s *State) removeGuildMember(e *eventGuildMemberRemove) error {
 	return nil
 }
 
-func (s *State) updateGuildMember(e *eventGuildMemberUpdate) error {
+func (s *State) updateGuildMember(e *EventGuildMemberUpdate) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild
@@ -751,15 +742,15 @@ func (s *State) updateGuildMember(e *eventGuildMemberUpdate) error {
 }
 
 // TODO not sure how to handle this stuff
-func (s *State) chunkGuildMembers(e *eventGuildMembersChunk) error {
+func (s *State) chunkGuildMembers(e *EventGuildMembersChunk) error {
 	panic("TODO")
 }
 
-func (s *State) createGuildRole(e *eventGuildRoleCreate) error {
+func (s *State) createGuildRole(e *EventGuildRoleCreate) error {
 	return s.insertGuildRole(e.GuildID, &e.Role)
 }
 
-func (s *State) updateGuildRole(e *eventGuildRoleUpdate) error {
+func (s *State) updateGuildRole(e *EventGuildRoleUpdate) error {
 	return s.insertGuildRole(e.GuildID, &e.Role)
 }
 
@@ -774,7 +765,7 @@ func (s *State) insertGuildRole(gID string, r *ModelRole) error {
 	return nil
 }
 
-func (s *State) deleteGuildRole(e *eventGuildRoleDelete) error {
+func (s *State) deleteGuildRole(e *EventGuildRoleDelete) error {
 	sg, ok := s.guilds[e.GuildID]
 	if !ok {
 		return errUnknownGuild

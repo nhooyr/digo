@@ -11,7 +11,7 @@ var (
 	client = &RESTClient{
 		Token: os.Getenv("DISCORD_TOKEN"),
 	}
-	ctx = context.Background()
+	ctx = context.TODO()
 )
 
 func TestClient_APIError(t *testing.T) {

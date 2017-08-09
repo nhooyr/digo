@@ -1,6 +1,7 @@
 package discgo
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -8,7 +9,7 @@ import (
 
 func TestGateway_Get(t *testing.T) {
 	e := client.Gateway()
-	url, err := e.GetURL()
+	url, err := e.GetURL(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -16,14 +17,26 @@ func TestGateway_Get(t *testing.T) {
 }
 
 func TestConn_Connect(t *testing.T) {
-	gatewayURL, err := client.Gateway().GetURL()
+	gatewayURL, err := client.Gateway().GetURL(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	s := new(State)
 	c := &GatewayClient{
 		Token:      os.Getenv("DISCORD_TOKEN"),
 		GatewayURL: gatewayURL,
+		EventHandler: EventHandlerFunc(func(ctx context.Context, e interface{}) error {
+			err := s.handle(e)
+			if err != nil {
+				return err
+			}
+			switch e := e.(type) {
+			case *EventMessageCreate:
+				t.Log(e.Content)
+			}
+			return nil
+		}),
 	}
 
 	err = c.Connect()
@@ -32,5 +45,5 @@ func TestConn_Connect(t *testing.T) {
 	}
 	time.Sleep(time.Second * 6)
 	c.reconnectChan <- struct{}{}
-	select {}
+	time.Sleep(time.Second * 20)
 }

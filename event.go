@@ -23,10 +23,6 @@ type EventChannelCreate struct {
 	ModelChannel
 }
 
-type StateChannelCreate struct {
-	*StateChannel
-}
-
 type EventChannelUpdate struct {
 	ModelChannel
 }
@@ -85,34 +81,34 @@ type EventGuildMemberAdd struct {
 	GuildID string `json:"guild_id"`
 }
 
-type eventGuildMemberRemove struct {
+type EventGuildMemberRemove struct {
 	User    ModelUser `json:"user"`
 	GuildID string    `json:"guild_id"`
 }
 
-type eventGuildMemberUpdate struct {
+type EventGuildMemberUpdate struct {
 	GuildID string    `json:"guild_id"`
 	Roles   []string  `json:"roles"`
 	User    ModelUser `json:"user"`
 	Nick    string    `json:"nick"`
 }
 
-type eventGuildMembersChunk struct {
+type EventGuildMembersChunk struct {
 	GuildID string              `json:"guild_id"`
 	Members []*ModelGuildMember `json:"members"`
 }
 
-type eventGuildRoleCreate struct {
+type EventGuildRoleCreate struct {
 	GuildID string    `json:"guild_id"`
 	Role    ModelRole `json:"role"`
 }
 
-type eventGuildRoleUpdate struct {
+type EventGuildRoleUpdate struct {
 	GuildID string    `json:"guild_id"`
 	Role    ModelRole `json:"role"`
 }
 
-type eventGuildRoleDelete struct {
+type EventGuildRoleDelete struct {
 	GuildID string    `json:"guild_id"`
 	Role    ModelRole `json:"role"`
 }
@@ -248,17 +244,17 @@ func getEventStruct(eventType string) (interface{}, error) {
 	case "GUILD_MEMBER_ADD":
 		return new(EventGuildMemberAdd), nil
 	case "GUILD_MEMBER_REMOVE":
-		return new(eventGuildMemberRemove), nil
+		return new(EventGuildMemberRemove), nil
 	case "GUILD_MEMBER_UPDATE":
-		return new(eventGuildMemberUpdate), nil
+		return new(EventGuildMemberUpdate), nil
 	case "GUILD_MEMBERS_CHUNK":
-		return new(eventGuildMembersChunk), nil
+		return new(EventGuildMembersChunk), nil
 	case "GUILD_ROLE_CREATE":
-		return new(eventGuildRoleCreate), nil
+		return new(EventGuildRoleCreate), nil
 	case "GUILD_ROLE_UPDATE":
-		return new(eventGuildRoleUpdate), nil
+		return new(EventGuildRoleUpdate), nil
 	case "GUILD_ROLE_DELETE":
-		return new(eventGuildRoleDelete), nil
+		return new(EventGuildRoleDelete), nil
 	case "MESSAGE_CREATE":
 		return new(EventMessageCreate), nil
 	case "MESSAGE_UPDATE":
